@@ -1,0 +1,44 @@
+{
+    "python.autoComplete.extraPaths": [
+        "/opt/ros/melodic/lib/python2.7/dist-packages"
+    ],
+    "todo-tree.general.tags": [
+        "?",
+        "!",
+        " Step ",
+        ">"
+        ],
+        "todo-tree.highlights.customHighlight": {
+        "?": {
+        "foreground": "red",
+        "icon": "question",
+        "iconColour": "red",
+        "type": "text-and-comment"
+        },
+        " Step ": {
+            "foreground": "#7CFC00",
+            "icon": "question",
+            "iconColour": "green",
+            "type": "text-and-comment",
+            "hideFromTree": true
+            },
+        ">": {
+            "foreground": "#fc00eb",
+            "icon": "note",
+            "iconColour": "green",
+            "type": "text-and-comment"
+            },
+        "!": {
+        "foreground": "yellow",
+        "icon": "issue-opened",
+        "iconColour": "yellow",
+        "type": "text-and-comment"
+        },
+        },
+        "todo-tree.general.revealBehaviour": "highlight todo",
+        "todo-tree.tree.showCountsInTree": true,
+        "todo-tree.filtering.excludeGlobs":[
+        "**/*.txt",
+        "**/*.md"
+        ]
+}
