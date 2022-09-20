@@ -143,8 +143,8 @@ getMeasurements()
             imu_buf.pop();
         }
         // 保留图像时间戳后一个imu数据，但不会从buffer中扔掉
-        // imu    *   *
-        // image    *
+        // imu    *       *
+        // image    *          插值
         IMUs.emplace_back(imu_buf.front());
         if (IMUs.empty())
             ROS_WARN("no imu between two image");
@@ -167,7 +167,7 @@ void imu_callback(const sensor_msgs::ImuConstPtr &imu_msg)
         return;
     }
     last_imu_t = imu_msg->header.stamp.toSec();
-    // 讲一下线程锁 条件变量用法
+    // 讲一下线程锁 条件变量用法 https://wenku.baidu.com/view/3ecb7029bdd5b9f3f90f76c66137ee06eff94eab.html
     m_buf.lock();
     imu_buf.push(imu_msg);
     m_buf.unlock();

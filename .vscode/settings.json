@@ -40,5 +40,9 @@
         "todo-tree.filtering.excludeGlobs":[
         "**/*.txt",
         "**/*.md"
-        ]
+        ],
+        "files.associations": {
+            "nonlinearoptimization": "cpp",
+            "*.txx": "cpp"
+        }
 }

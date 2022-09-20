@@ -77,7 +77,7 @@ void readParameters(ros::NodeHandle &n)
     COL = fsSettings["image_width"];
     ROS_INFO("ROW: %f COL: %f ", ROW, COL);
 
-    ESTIMATE_EXTRINSIC = fsSettings["estimate_extrinsic"];
+    ESTIMATE_EXTRINSIC = fsSettings["estimate_extrinsic"];  // 是否在线标定外参
     if (ESTIMATE_EXTRINSIC == 2)
     {
         ROS_WARN("have no prior about extrinsic param, calibrate extrinsic param");
