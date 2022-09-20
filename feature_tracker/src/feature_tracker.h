@@ -46,11 +46,12 @@ class FeatureTracker
 
     void undistortedPoints();
 
+  // ! prev_*没有具体作用，只是转存上一帧信息；cur_*存储上一帧信息；forw_*存储当前帧信息
     cv::Mat mask;
     cv::Mat fisheye_mask;
     cv::Mat prev_img, cur_img, forw_img;
     vector<cv::Point2f> n_pts;
-    vector<cv::Point2f> prev_pts, cur_pts, forw_pts;
+    vector<cv::Point2f> prev_pts, cur_pts, forw_pts;  
     vector<cv::Point2f> prev_un_pts, cur_un_pts;
     vector<cv::Point2f> pts_velocity;
     vector<int> ids;

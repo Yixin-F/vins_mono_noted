@@ -150,7 +150,8 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
                     p.x = un_pts[j].x;
                     p.y = un_pts[j].y;
                     p.z = 1;
-                    // 利用这个ros消息的格式进行信息存储
+
+                    // > 利用这个ros消息的格式进行信息存储
                     feature_points->points.push_back(p);
                     id_of_point.values.push_back(p_id * NUM_OF_CAM + i);
                     u_of_point.values.push_back(cur_pts[j].x);
@@ -206,8 +207,8 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
                     //cv::putText(tmp_img, name, trackerData[i].cur_pts[j], cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0));
                 }
             }
-            //cv::imshow("vis", stereo_img);
-            //cv::waitKey(5);
+            //cv::imshow("vis", stereo_img);  // 这里一定要注释掉，否则程序不往下运行了
+            //cv::waitKey(5); 
             pub_match.publish(ptr->toImageMsg());
         }
     }

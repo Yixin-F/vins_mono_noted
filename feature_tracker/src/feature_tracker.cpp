@@ -10,7 +10,7 @@ bool inBorder(const cv::Point2f &pt)
     return BORDER_SIZE <= img_x && img_x < COL - BORDER_SIZE && BORDER_SIZE <= img_y && img_y < ROW - BORDER_SIZE;
 }
 
-// 根据状态位，进行“瘦身”
+// > 双指针，根据状态位，进行“瘦身”
 void reduceVector(vector<cv::Point2f> &v, vector<uchar> status)
 {
     int j = 0;
@@ -49,6 +49,7 @@ void FeatureTracker::setMask()
     for (unsigned int i = 0; i < forw_pts.size(); i++)
         cnt_pts_id.push_back(make_pair(track_cnt[i], make_pair(forw_pts[i], ids[i])));
     // 利用光流特点，追踪多的稳定性好，排前面
+    // > 排序函数一定不能声明在类内，因为std无法访问类内函数，一是像这样可以，二是声明为全局函数
     sort(cnt_pts_id.begin(), cnt_pts_id.end(), [](const pair<int, pair<cv::Point2f, int>> &a, const pair<int, pair<cv::Point2f, int>> &b)
          {
             return a.first > b.first;
@@ -67,6 +68,7 @@ void FeatureTracker::setMask()
             ids.push_back(it.second.second);
             track_cnt.push_back(it.first);
             // opencv函数，把周围一个圆内全部置0,这个区域不允许别的特征点存在，避免特征点过于集中
+            // > orb2中是使用四叉树来实现特征均匀分配，虽然这样更规格，但是远没有vins的该方法快，毕竟vins特征跟踪数量远高于orb2的orb特征提取
             cv::circle(mask, it.second.first, MIN_DIST, 0, -1);
         }
     }
@@ -128,15 +130,17 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
         TicToc t_o;
         vector<uchar> status;
         vector<float> err;
-        // 调用opencv函数进行光流追踪
-        // Step 1 通过opencv光流追踪给的状态位剔除outlier
-        cv::calcOpticalFlowPyrLK(cur_img, forw_img, cur_pts, forw_pts, status, err, cv::Size(21, 21), 3);
+        
+        // Step 1 通过opencv光流追踪给的状态位剔除outlier，灰度不变假设，灰度误差跟踪
+        // > vins图像金字塔提高了光流追踪的鲁棒性，低分辨率做为高分辨率的追踪初值，防止直接高分辨率追踪导致的局部最优问题
+        // > orb2图像金字塔是为了多尺度提取特征的鲁棒性
+        cv::calcOpticalFlowPyrLK(cur_img, forw_img, cur_pts, forw_pts, status, err, cv::Size(21, 21), 3);  // 4层金字塔
 
+        // Step 2 通过图像边界剔除outlier
         for (int i = 0; i < int(forw_pts.size()); i++)
-            // Step 2 通过图像边界剔除outlier
             if (status[i] && !inBorder(forw_pts[i]))    // 追踪状态好检查在不在图像范围
                 status[i] = 0;
-        reduceVector(prev_pts, status); // 没用到
+        reduceVector(prev_pts, status); // ! 没用到
         reduceVector(cur_pts, status);
         reduceVector(forw_pts, status);
         reduceVector(ids, status);  // 特征点的id
@@ -152,6 +156,8 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
     {
         // Step 3 通过对级约束来剔除outlier
         rejectWithF();
+
+        // Step 4 当前帧特征不足，根据mask需要另外提取
         ROS_DEBUG("set mask begins");
         TicToc t_m;
         setMask();
@@ -178,7 +184,7 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
 
         ROS_DEBUG("add feature begins");
         TicToc t_a;
-        addPoints();
+        addPoints();  // 将n_pts存入
         ROS_DEBUG("selectFeature costs: %fms", t_a.toc());
     }
     prev_img = cur_img;
@@ -191,7 +197,7 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
 }
 
 /**
- * @brief 
+ * @brief  通过对极约束去除outliers
  * 
  */
 void FeatureTracker::rejectWithF()
@@ -201,15 +207,16 @@ void FeatureTracker::rejectWithF()
     {
         ROS_DEBUG("FM ransac begins");
         TicToc t_f;
-        vector<cv::Point2f> un_cur_pts(cur_pts.size()), un_forw_pts(forw_pts.size());
+        vector<cv::Point2f> un_cur_pts(cur_pts.size()), un_forw_pts(forw_pts.size());  // 存储去畸变的像素坐标系下的坐标
         for (unsigned int i = 0; i < cur_pts.size(); i++)
         {
             Eigen::Vector3d tmp_p;
-            // 得到相机归一化坐标系的值
-            m_camera->liftProjective(Eigen::Vector2d(cur_pts[i].x, cur_pts[i].y), tmp_p);
+            // > 得到去畸变的坐标
+            m_camera->liftProjective(Eigen::Vector2d(cur_pts[i].x, cur_pts[i].y), tmp_p); 
             // 这里用一个虚拟相机，原因同样参考https://github.com/HKUST-Aerial-Robotics/VINS-Mono/issues/48
             // 这里有个好处就是对F_THRESHOLD和相机无关
-            // 投影到虚拟相机的像素坐标系
+            // ! 投影到虚拟相机的像素坐标系，虚拟相机的参数是写死的，从而适配所有相机类型，肯定不如用真实的参数更精确，但这里只是通过对极约束来去除outliers而已
+            // > 归一化同时转入像素坐标系，后面加COL / 2.0和ROW / 2.0是因为像素坐标系原点在图像顶角上
             tmp_p.x() = FOCAL_LENGTH * tmp_p.x() / tmp_p.z() + COL / 2.0;
             tmp_p.y() = FOCAL_LENGTH * tmp_p.y() / tmp_p.z() + ROW / 2.0;
             un_cur_pts[i] = cv::Point2f(tmp_p.x(), tmp_p.y());
@@ -309,7 +316,10 @@ void FeatureTracker::undistortedPoints()
         // 有的之前去过畸变了，这里连同新人重新做一次
         Eigen::Vector2d a(cur_pts[i].x, cur_pts[i].y);
         Eigen::Vector3d b;
+
+        // > 同样使用这个接口，在camera_model中liftProjective的参数已经设置好了
         m_camera->liftProjective(a, b);
+
         cur_un_pts.push_back(cv::Point2f(b.x() / b.z(), b.y() / b.z()));
         // id->坐标的map
         cur_un_pts_map.insert(make_pair(ids[i], cv::Point2f(b.x() / b.z(), b.y() / b.z())));

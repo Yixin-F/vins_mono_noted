@@ -140,7 +140,7 @@ void KeyFrame::computeBRIEFPoint()
 	for (int i = 0; i < (int)keypoints.size(); i++)
 	{
 		Eigen::Vector3d tmp_p;
-		m_camera->liftProjective(Eigen::Vector2d(keypoints[i].pt.x, keypoints[i].pt.y), tmp_p);	// 将像素坐标得到去畸变的归一化相机坐标
+		m_camera->liftProjective(Eigen::Vector2d(keypoints[i].pt.x, keypoints[i].pt.y), tmp_p);	// 得到去畸变的坐标
 		cv::KeyPoint tmp_norm;
 		tmp_norm.pt = cv::Point2f(tmp_p.x()/tmp_p.z(), tmp_p.y()/tmp_p.z());	// 再归一化一下
 		keypoints_norm.push_back(tmp_norm);
