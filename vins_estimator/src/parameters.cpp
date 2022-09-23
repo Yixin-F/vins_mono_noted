@@ -61,23 +61,23 @@ void readParameters(ros::NodeHandle &n)
     VINS_RESULT_PATH = OUTPUT_PATH + "/vins_result_no_loop.csv";
     std::cout << "result path " << VINS_RESULT_PATH << std::endl;
 
-    // create folder if not exists
+    // > create folder if not exists
     FileSystemHelper::createDirectoryIfNotExists(OUTPUT_PATH.c_str());
 
     std::ofstream fout(VINS_RESULT_PATH, std::ios::out);
     fout.close();
 
     // imu、图像相关参数
-    ACC_N = fsSettings["acc_n"];
-    ACC_W = fsSettings["acc_w"];
-    GYR_N = fsSettings["gyr_n"];
-    GYR_W = fsSettings["gyr_w"];
-    G.z() = fsSettings["g_norm"];
+    ACC_N = fsSettings["acc_n"];  // nosie
+    ACC_W = fsSettings["acc_w"];  // bias
+    GYR_N = fsSettings["gyr_n"];  // noise
+    GYR_W = fsSettings["gyr_w"];  // bias
+    G.z() = fsSettings["g_norm"];  // g
     ROW = fsSettings["image_height"];
     COL = fsSettings["image_width"];
     ROS_INFO("ROW: %f COL: %f ", ROW, COL);
 
-    ESTIMATE_EXTRINSIC = fsSettings["estimate_extrinsic"];  // 是否在线标定外参
+    ESTIMATE_EXTRINSIC = fsSettings["estimate_extrinsic"];  // ! 是否在线标定外参
     if (ESTIMATE_EXTRINSIC == 2)
     {
         ROS_WARN("have no prior about extrinsic param, calibrate extrinsic param");

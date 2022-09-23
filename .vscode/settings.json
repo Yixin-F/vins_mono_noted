@@ -45,5 +45,6 @@
             "nonlinearoptimization": "cpp",
             "*.txx": "cpp",
             "*.ipp": "cpp"
-        }
+        },
+        "todo-tree.tree.scanMode": "workspace"
 }
