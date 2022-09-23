@@ -18,7 +18,7 @@ void Estimator::setParameter()
         ric[i] = RIC[i];
     }
     f_manager.setRic(ric);
-    // 这里可以看到虚拟相机的用法
+    // 这里可以看到虚拟相机的用法，1.5个像素误差
     ProjectionFactor::sqrt_info = FOCAL_LENGTH / 1.5 * Matrix2d::Identity();
     ProjectionTdFactor::sqrt_info = FOCAL_LENGTH / 1.5 * Matrix2d::Identity();
     td = TD;
@@ -108,7 +108,7 @@ void Estimator::processIMU(double dt, const Vector3d &linear_acceleration, const
     {
         pre_integrations[frame_count] = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count]};
     }
-    // 所以只有大于0才处理
+    // 所以只有大于0才处理，也就是说第一帧不处理，因为第一帧imu在最开头，并未产生图像帧间约束
     if (frame_count != 0)
     {
         pre_integrations[frame_count]->push_back(dt, linear_acceleration, angular_velocity);
@@ -119,6 +119,7 @@ void Estimator::processIMU(double dt, const Vector3d &linear_acceleration, const
         dt_buf[frame_count].push_back(dt);
         linear_acceleration_buf[frame_count].push_back(linear_acceleration);
         angular_velocity_buf[frame_count].push_back(angular_velocity);
+		
         // 又是一个中值积分，更新滑窗中状态量，本质是给非线性优化提供可信的初始值
         int j = frame_count;         
         Vector3d un_acc_0 = Rs[j] * (acc_0 - Bas[j]) - g;

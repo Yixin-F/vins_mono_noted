@@ -66,6 +66,8 @@ void predict(const sensor_msgs::ImuConstPtr &imu_msg)
     double ry = imu_msg->angular_velocity.y;
     double rz = imu_msg->angular_velocity.z;
     Eigen::Vector3d angular_velocity{rx, ry, rz};
+
+    // ! 一次中值积分
     // 上一时刻世界坐标系下加速度值
     Eigen::Vector3d un_acc_0 = tmp_Q * (acc_0 - tmp_Ba) - estimator.g;
 
@@ -81,9 +83,10 @@ void predict(const sensor_msgs::ImuConstPtr &imu_msg)
     tmp_P = tmp_P + dt * tmp_V + 0.5 * dt * dt * un_acc;
     tmp_V = tmp_V + dt * un_acc;
 
-    acc_0 = linear_acceleration;
+    acc_0 = linear_acceleration;   // 处理过后变成上一帧
     gyr_0 = angular_velocity;
 }
+
 // 用最新VIO结果更新最新imu对应的位姿
 void update()
 {
@@ -104,7 +107,7 @@ void update()
 
 }
 
-// 获得匹配好的图像imu组
+// 获得匹配好的图像imu组，imu覆盖图像帧
 std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr>>
 getMeasurements()
 {
@@ -132,6 +135,7 @@ getMeasurements()
             feature_buf.pop();
             continue;
         }
+
         // 此时就保证了图像前一定有imu数据
         sensor_msgs::PointCloudConstPtr img_msg = feature_buf.front();
         feature_buf.pop();
@@ -167,7 +171,7 @@ void imu_callback(const sensor_msgs::ImuConstPtr &imu_msg)
         return;
     }
     last_imu_t = imu_msg->header.stamp.toSec();
-    // 讲一下线程锁 条件变量用法 https://wenku.baidu.com/view/3ecb7029bdd5b9f3f90f76c66137ee06eff94eab.html
+    // 讲一下线程锁 条件变量用法 https://blog.csdn.net/weixin_42398658/article/details/121647502
     m_buf.lock();
     imu_buf.push(imu_msg);
     m_buf.unlock();
@@ -177,9 +181,10 @@ void imu_callback(const sensor_msgs::ImuConstPtr &imu_msg)
 
     {
         std::lock_guard<std::mutex> lg(m_state);
-        predict(imu_msg);
+        predict(imu_msg);   // 中值积分用掉了此次imu
         std_msgs::Header header = imu_msg->header;
         header.frame_id = "world";
+
         // 只有初始化完成后才发送当前结果
         if (estimator.solver_flag == Estimator::SolverFlag::NON_LINEAR)
             pubLatestOdometry(tmp_P, tmp_Q, tmp_V, header);
@@ -206,7 +211,7 @@ void feature_callback(const sensor_msgs::PointCloudConstPtr &feature_msg)
 }
 
 /**
- * @brief 将vins估计器复位
+ * @brief 光流跟踪失败将vins估计器复位
  * 
  * @param[in] restart_msg 
  */
@@ -247,6 +252,8 @@ void process()
     {
         std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr>> measurements;
         std::unique_lock<std::mutex> lk(m_buf);
+
+        // Step 1 等待Imu和图像对齐的数据
         con.wait(lk, [&]
                  {
             return (measurements = getMeasurements()).size() != 0;

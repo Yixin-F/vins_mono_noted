@@ -43,6 +43,7 @@
         ],
         "files.associations": {
             "nonlinearoptimization": "cpp",
-            "*.txx": "cpp"
+            "*.txx": "cpp",
+            "*.ipp": "cpp"
         }
 }
