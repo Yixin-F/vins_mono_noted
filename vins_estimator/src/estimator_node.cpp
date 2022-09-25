@@ -122,7 +122,7 @@ getMeasurements()
  
         // imu                 *******
         // image          *****
-        // ? 这就是imu还没来
+        // ? 这就是imu还没来？？ 这个队列到底是怎么存取的
         if (!(imu_buf.back()->header.stamp.toSec() > feature_buf.front()->header.stamp.toSec() + estimator.td))
         {
             //ROS_WARN("wait for imu, only should happen at the beginning");
