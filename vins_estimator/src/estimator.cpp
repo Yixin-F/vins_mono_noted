@@ -171,7 +171,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         {
             // 这里标定imu和相机的旋转外参的初值
             // 因为预积分是相邻帧的约束，因为这里得到的图像关联也是相邻的
-            vector<pair<Vector3d, Vector3d>> corres = f_manager.getCorresponding(frame_count - 1, frame_count);
+            vector<pair<Vector3d, Vector3d>> corres = f_manager.getCorresponding(frame_count - 1, frame_count); // 取出相邻图像帧之间的共识点
             Matrix3d calib_ric;
             if (initial_ex_rotation.CalibrationExRotation(corres, pre_integrations[frame_count]->delta_q, calib_ric))
             {
@@ -263,6 +263,7 @@ bool Estimator::initialStructure()
 {
     TicToc t_sfm;
     // Step 1 check imu observibility
+    // 希望得到足够的激励
     {
         map<double, ImageFrame>::iterator frame_it;
         Vector3d sum_g;
@@ -288,13 +289,14 @@ bool Estimator::initialStructure()
         // 得到的标准差
         var = sqrt(var / ((int)all_image_frame.size() - 1));
         //ROS_WARN("IMU variation %f!", var);
-        // 实际上检查结果并没有用
+        // 实际上检查结果并没有用，imu激励不足够
         if(var < 0.25)
         {
-            ROS_INFO("IMU excitation not enouth!");
+            ROS_INFO("IMU excitation not enough!");
             //return false;
         }
     }
+
     // Step 2 global sfm
     // 做一个纯视觉slam
     Quaterniond Q[frame_count + 1];
@@ -337,7 +339,7 @@ bool Estimator::initialStructure()
     }
 
     // Step 3 solve pnp for all frame
-    // step2只是针对KF进行sfm，初始化需要all_image_frame中的所有元素，因此下面通过KF来求解其他的非KF的位姿
+    // 只是针对KF进行sfm，初始化需要all_image_frame中的所有元素，因此下面通过KF来求解其他的非KF的位姿
     map<double, ImageFrame>::iterator frame_it;
     map<int, Vector3d>::iterator it;
     frame_it = all_image_frame.begin( );
@@ -415,6 +417,7 @@ bool Estimator::initialStructure()
         frame_it->second.R = R_pnp * RIC[0].transpose();
         frame_it->second.T = T_pnp;
     }
+    
     // 到此就求解出用来做视觉惯性对齐的所有视觉帧的位姿
     // Step 4 视觉惯性对齐
     if (visualInitialAlign())

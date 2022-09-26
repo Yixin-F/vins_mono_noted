@@ -8,16 +8,18 @@ InitialEXRotation::InitialEXRotation(){
     ric = Matrix3d::Identity();
 }
 
-// 标定imu和相机之间的旋转外参，通过imu和图像计算的旋转使用手眼标定计算获得
+// > 标定imu和相机之间的旋转外参，通过imu和图像计算的旋转使用手眼标定计算获得
 bool InitialEXRotation::CalibrationExRotation(vector<pair<Vector3d, Vector3d>> corres, Quaterniond delta_q_imu, Matrix3d &calib_ric_result)
 {
     frame_count++;
     // 根据特征关联求解两个连续帧相机的旋转R12
     Rc.push_back(solveRelativeR(corres));
     Rimu.push_back(delta_q_imu.toRotationMatrix());
+
     // 通过外参把imu的旋转转移到相机坐标系
     Rc_g.push_back(ric.inverse() * delta_q_imu * ric);  // ric是上一次求解得到的外参
 
+    // 构建了一个超定方程，一起求旋转外参
     Eigen::MatrixXd A(frame_count * 4, 4);
     A.setZero();
     int sum_ok = 0;
@@ -60,7 +62,7 @@ bool InitialEXRotation::CalibrationExRotation(vector<pair<Vector3d, Vector3d>> c
     //cout << ric << endl;
     Vector3d ric_cov;
     ric_cov = svd.singularValues().tail<3>();
-    // 倒数第二个奇异值，因为旋转是3个自由度，因此检查一下第三小的奇异值是否足够大，通常需要足够的运动激励才能保证得到没有奇异的解
+    // > 倒数第二个奇异值，因为旋转是3个自由度，因此检查一下第三小的奇异值是否足够大，通常需要足够的运动激励才能保证得到没有奇异的解
     if (frame_count >= WINDOW_SIZE && ric_cov(1) > 0.25)
     {
         calib_ric_result = ric;
@@ -91,12 +93,13 @@ Matrix3d InitialEXRotation::solveRelativeR(const vector<pair<Vector3d, Vector3d>
             E = -E;
             decomposeE(E, R1, R2, t1, t2);
         }
+
+        // test 4 result after decomposeE() by Triangulation
         double ratio1 = max(testTriangulation(ll, rr, R1, t1), testTriangulation(ll, rr, R1, t2));
         double ratio2 = max(testTriangulation(ll, rr, R2, t1), testTriangulation(ll, rr, R2, t2));
         cv::Mat_<double> ans_R_cv = ratio1 > ratio2 ? R1 : R2;
 
-        // 解出来的是R21
-
+        // 解出来的是R21，与imu预积分计算的相对参考系是反的，所以后面有个转置
         Matrix3d ans_R_eigen;
         for (int i = 0; i < 3; i++)
             for (int j = 0; j < 3; j++)
@@ -135,10 +138,11 @@ double InitialEXRotation::testTriangulation(const vector<cv::Point2f> &l,
     {
         // 因为是齐次的，所以要求最后一维等于1
         double normal_factor = pointcloud.col(i).at<float>(3);
+        
         // 得到在各自相机坐标系下的3d坐标
         cv::Mat_<double> p_3d_l = cv::Mat(P) * (pointcloud.col(i) / normal_factor);
         cv::Mat_<double> p_3d_r = cv::Mat(P1) * (pointcloud.col(i) / normal_factor);
-        // 通过深度是否大于0来判断是否合理
+        // > 通过深度是否大于0来判断是否合理
         if (p_3d_l(2) > 0 && p_3d_r(2) > 0)
             front_count++;
     }
