@@ -228,7 +228,8 @@ bool MotionEstimator::solveRelativeRT(const vector<pair<Vector3d, Vector3d>> &co
             for (int j = 0; j < 3; j++)
                 R(i, j) = rot.at<double>(i, j);
         }
-        // opencv得到的是T21,这里换成T12
+        // > opencv得到的是T21,这里换成T12
+        // > 手动计算的反转变换
         Rotation = R.transpose();
         Translation = -R.transpose() * T;
         if(inlier_cnt > 12)

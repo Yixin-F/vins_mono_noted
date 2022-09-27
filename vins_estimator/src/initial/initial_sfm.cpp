@@ -76,7 +76,7 @@ bool GlobalSFM::solveFrameByPnP(Matrix3d &R_initial, Vector3d &P_initial, int i,
 	cv::eigen2cv(P_initial, t);
 	cv::Mat K = (cv::Mat_<double>(3, 3) << 1, 0, 0, 0, 1, 0, 0, 0, 1);
 	bool pnp_succ;
-	pnp_succ = cv::solvePnP(pts_3_vector, pts_2_vector, K, D, rvec, t, 1);
+	pnp_succ = cv::solvePnP(pts_3_vector, pts_2_vector, K, D, rvec, t, 1);  // 
 	if(!pnp_succ)
 	{
 		return false;
@@ -90,11 +90,10 @@ bool GlobalSFM::solveFrameByPnP(Matrix3d &R_initial, Vector3d &P_initial, int i,
 	R_initial = R_pnp;
 	P_initial = T_pnp;
 	return true;
-
 }
 
 /**
- * @brief 根据两帧索引和位姿计算对应特征点的三角化位置
+ * @brief 根据两帧索引和位姿计算对应特征点的三角化位置，自己写了一个接口
  * 
  * @param[in] frame0 
  * @param[in] Pose0 
@@ -176,14 +175,15 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 	q[l].y() = 0;
 	q[l].z() = 0;
 	T[l].setZero();
+
 	// 求得最后一帧的位姿
 	q[frame_num - 1] = q[l] * Quaterniond(relative_R);
 	T[frame_num - 1] = relative_T;
 	//cout << "init q_l " << q[l].w() << " " << q[l].vec().transpose() << endl;
 	//cout << "init t_l " << T[l].transpose() << endl;
 
-	// 由于纯视觉slam处理都是Tcw,因此下面把Twc转成Tcw
-	//rotate to cam frame
+	// 由于纯视觉slam处理都是Tcw(世界向相机),包括orbslam，但是vins里这里的枢纽帧和最后一帧的位姿是是Twc相反的，因此下面把Twc转成Tcw
+	// rotate to cam frame
 	Matrix3d c_Rotation[frame_num];
 	Vector3d c_Translation[frame_num];
 	Quaterniond c_Quat[frame_num];
@@ -214,7 +214,7 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 		// solve pnp
 		if (i > l)
 		{
-			// 这是依次求解，因此上一帧的位姿是已知量
+			// ! 这是依次求解，因此上一帧的位姿是已知量做为初值
 			Matrix3d R_initial = c_Rotation[i - 1];
 			Vector3d P_initial = c_Translation[i - 1];
 			if(!solveFrameByPnP(R_initial, P_initial, i, sfm_f))
@@ -290,12 +290,14 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 		cout << "solvePnP  t" << " i " << i <<"  " << t_tmp.x() <<"  "<< t_tmp.y() <<"  "<< t_tmp.z() << endl;
 	}
 */
+
 	//full BA
-	// Step 5 求出了所有的位姿和3d点之后，进行一个视觉slam的global BA
+	// Step 5 求出了所有的位姿和3d点之后，进行一个视觉slam的global BA，gobal BA指的是对滑窗内的所以kf进行BA，非global BA指的是针对相邻两帧
 	// 可能需要介绍一下ceres  http://ceres-solver.org/
+	// 数值求导的速度会快于自动求导，如果说在实时恢复两帧位姿的情况下去BA那么肯定数值求导最好，只不过自己计算出来比较繁琐；但是对于像初始化这种对实时性要求不高的情况，可以选择自动求导
 	ceres::Problem problem;
 	ceres::LocalParameterization* local_parameterization = new ceres::QuaternionParameterization();
-	//cout << " begin full BA " << endl;
+	// cout << " begin full BA " << endl;
 	for (int i = 0; i < frame_num; i++)
 	{
 		//double array for ceres
@@ -309,7 +311,13 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 		c_rotation[i][3] = c_Quat[i].z();
 		problem.AddParameterBlock(c_rotation[i], 4, local_parameterization);
 		problem.AddParameterBlock(c_translation[i], 3);
+
 		// 由于是单目视觉slam，有七个自由度不可观，因此，fix一些参数块避免在零空间漂移
+		// 可观性/能观性用最通俗和直观的方式来描述就是：状态一变，测量就变
+		// 单目slam存在7自由度不可观：3旋转，3平移，尺度皆不可观
+		// 单目+IMU存在4自由度不可观：Yaw与3平移，pitch与roll因重力而可观，尺度因加速度计而可观
+		// 因此在调试对应slam系统中，如果出现问题，一定要考虑到可观性/能观性问题
+
 		// fix设置的世界坐标系第l帧的位姿，同时fix最后一帧的位移用来fix尺度
 		if (i == l)
 		{
@@ -325,7 +333,7 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 	{
 		if (sfm_f[i].state != true)	// 必须是三角化之后的
 			continue;
-		// 遍历所有的观测帧，对这些帧建立约束
+		// 遍历所有的观测帧，对这些帧逐个建立约束
 		for (int j = 0; j < int(sfm_f[i].observation.size()); j++)
 		{
 			int l = sfm_f[i].observation[j].first;

@@ -194,7 +194,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
             // Step 3： VIO初始化
             if( ESTIMATE_EXTRINSIC != 2 && (header.stamp.toSec() - initial_timestamp) > 0.1)
             {
-               result = initialStructure();
+               result = initialStructure(); 
                initial_timestamp = header.stamp.toSec();
             }
             if(result)
@@ -289,7 +289,7 @@ bool Estimator::initialStructure()
         // 得到的标准差
         var = sqrt(var / ((int)all_image_frame.size() - 1));
         //ROS_WARN("IMU variation %f!", var);
-        // 实际上检查结果并没有用，imu激励不足够
+        // ? 实际上检查结果并没有用，imu激励不足够，但是下面把“return false”注释掉了，或许作者觉得影响不大
         if(var < 0.25)
         {
             ROS_INFO("IMU excitation not enough!");
@@ -319,14 +319,16 @@ bool Estimator::initialStructure()
         }
         sfm_f.push_back(tmp_feature);
     } 
-    Matrix3d relative_R;
+
+    Matrix3d relative_R;  // 枢纽帧与关联帧的变换
     Vector3d relative_T;
-    int l;
+    int l;  // 枢纽帧索引
     if (!relativePose(relative_R, relative_T, l))
     {
         ROS_INFO("Not enough features or parallax; Move device around");
         return false;
     }
+    
     GlobalSFM sfm;
     // 进行sfm的求解
     if(!sfm.construct(frame_count + 1, Q, T, l,
@@ -534,7 +536,7 @@ bool Estimator::relativePose(Matrix3d &relative_R, Vector3d &relative_T, int &l)
     for (int i = 0; i < WINDOW_SIZE; i++)
     {
         vector<pair<Vector3d, Vector3d>> corres;
-        corres = f_manager.getCorresponding(i, WINDOW_SIZE);
+        corres = f_manager.getCorresponding(i, WINDOW_SIZE);   // 第i帧和最后一帧的关联特征
         // 要求共视的特征点足够多
         if (corres.size() > 20)
         {
@@ -550,10 +552,11 @@ bool Estimator::relativePose(Matrix3d &relative_R, Vector3d &relative_T, int &l)
             }
             // 计算每个特征点的平均视差
             average_parallax = 1.0 * sum_parallax / int(corres.size());
-            // 有足够的视差在通过本质矩阵恢复第i帧和最后一帧之间的 R t T_i_last
+
+            // 有足够的视差在通过本质矩阵恢复第i帧和最后一帧之间的 R t T_i_last，因为只有视差足够大才能更精确恢复R和t，纯旋转情况完全是不可以的
             if(average_parallax * 460 > 30 && m_estimator.solveRelativeRT(corres, relative_R, relative_T))
             {
-                l = i;
+                l = i;  // 获得枢纽帧索引
                 ROS_DEBUG("average_parallax %f choose l %d and newest frame to triangulate the whole structure", average_parallax * 460, l);
                 return true;
             }
