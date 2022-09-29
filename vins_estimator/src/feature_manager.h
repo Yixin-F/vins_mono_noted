@@ -15,6 +15,7 @@ using namespace Eigen;
 
 #include "parameters.h"
 
+// 特征属性
 class FeaturePerFrame
 {
   public:
@@ -41,18 +42,19 @@ class FeaturePerFrame
     double dep_gradient;
 };
 
+// ? 特征点对象
 class FeaturePerId
 {
   public:
     const int feature_id;
-    int start_frame;
-    vector<FeaturePerFrame> feature_per_frame;  // 该id对应的特征点在每个帧中的属性
+    int start_frame;   // ? 检测到该特征的最早帧
+    vector<FeaturePerFrame> feature_per_frame;  // ! 该id对应的特征点在每个帧中的属性
 
     int used_num;
     bool is_outlier;
     bool is_margin;
     double estimated_depth;
-    int solve_flag; // 0 haven't solve yet; 1 solve succ; 2 solve fail;
+    int solve_flag; // 0 haven't solve yet; 1 solve succ; 2 solve fail;  是否三角化成功
 
     Vector3d gt_p;
 
@@ -90,7 +92,7 @@ class FeatureManager
     void removeBack();
     void removeFront(int frame_count);
     void removeOutlier();
-    list<FeaturePerId> feature;
+    list<FeaturePerId> feature;   // 存储所有的特征
     int last_track_num;
 
   private:

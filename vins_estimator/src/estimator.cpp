@@ -114,14 +114,16 @@ void Estimator::processIMU(double dt, const Vector3d &linear_acceleration, const
     {
         pre_integrations[frame_count]->push_back(dt, linear_acceleration, angular_velocity);
         //if(solver_flag != NON_LINEAR)
-            // 这个量用来做初始化用的
+
+            // !  这个量用来做初始化用的
             tmp_pre_integration->push_back(dt, linear_acceleration, angular_velocity);
+
         // 保存传感器数据
         dt_buf[frame_count].push_back(dt);
         linear_acceleration_buf[frame_count].push_back(linear_acceleration);
         angular_velocity_buf[frame_count].push_back(angular_velocity);
 		
-        // 又是一个中值积分，更新滑窗中状态量，本质是给非线性优化提供可信的初始值
+        // ! 又是一个中值积分，更新滑窗中状态量，本质是给非线性优化提供可信的初始值
         int j = frame_count;         
         Vector3d un_acc_0 = Rs[j] * (acc_0 - Bas[j]) - g;
         Vector3d un_gyr = 0.5 * (gyr_0 + angular_velocity) - Bgs[j];
@@ -153,7 +155,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
     ROS_DEBUG("number of feature: %d", f_manager.getFeatureCount());
     Headers[frame_count] = header;
 
-    // all_image_frame用来做初始化相关操作，他保留滑窗起始到当前的所有帧
+    // ! all_image_frame用来做初始化相关操作，他保留滑窗起始到当前的所有帧
     // 有一些帧会因为不是KF，被MARGIN_SECOND_NEW，但是及时较新的帧被margin，他也会保留在这个容器中，因为初始化要求使用所有的帧，而非只要KF
     ImageFrame imageframe(image, header.stamp.toSec());
     imageframe.pre_integration = tmp_pre_integration;
@@ -179,7 +181,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
                 ROS_WARN_STREAM("initial extrinsic rotation: " << endl << calib_ric);
                 ric[0] = calib_ric;
                 RIC[0] = calib_ric;
-                // 标志位设置成可信的外参初值
+                // ! 标志位设置成可信的外参初值
                 ESTIMATE_EXTRINSIC = 1;
             }
         }

@@ -26,7 +26,7 @@ void FeatureManager::clearState()
 }
 
 /**
- * @brief 得到有效的地图点的数目
+ * @brief 得到含有有效的地图点的图像帧数目
  * 
  * @return int 
  */
@@ -47,7 +47,7 @@ int FeatureManager::getFeatureCount()
 }
 
 /**
- * @brief 增加特征点信息，同时检查上一帧是否时关键帧
+ * @brief 增加特征点信息，同时通过视差检查上一帧是否时关键帧
  * 
  * @param[in] frame_count 
  * @param[in] image 
@@ -66,7 +66,7 @@ bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vec
     // 遍历每个特征点
     for (auto &id_pts : image)
     {
-        // 用特征点信息构造一个对象
+        // 用特征点信息构造一个特征对象
         FeaturePerFrame f_per_fra(id_pts.second[0].second, td);
 
         int feature_id = id_pts.first;
@@ -152,7 +152,7 @@ vector<pair<Vector3d, Vector3d>> FeatureManager::getCorresponding(int frame_coun
     vector<pair<Vector3d, Vector3d>> corres;
     for (auto &it : feature)
     {
-        // 保证需要的特征点被这两帧都观察到
+        // ! 保证需要的特征点被这两帧都观察到
         if (it.start_frame <= frame_count_l && it.endFrame() >= frame_count_r)
         {
             Vector3d a = Vector3d::Zero(), b = Vector3d::Zero();
@@ -246,7 +246,7 @@ VectorXd FeatureManager::getDepthVector()
 }
 
 /**
- * @brief 利用观测到该特征点的所有位姿来三角化特征点
+ * @brief 利用观测到该特征点的 --所有位姿-- 来三角化特征点
  * 
  * @param[in] Ps 
  * @param[in] tic 
@@ -290,11 +290,12 @@ void FeatureManager::triangulate(Vector3d Ps[], Vector3d tic[], Matrix3d ric[])
             P.leftCols<3>() = R.transpose();
             P.rightCols<1>() = -R.transpose() * t;
             Eigen::Vector3d f = it_per_frame.point.normalized();
-            // 构建超定方程的其中两个方程
+
+            // ! 构建超定方程的其中两个方程
             svd_A.row(svd_idx++) = f[0] * P.row(2) - f[2] * P.row(0);
             svd_A.row(svd_idx++) = f[1] * P.row(2) - f[2] * P.row(1);
 
-            if (imu_i == imu_j)
+            if (imu_i == imu_j)  // ? 这个if没用啊
                 continue;
         }
         ROS_ASSERT(svd_idx == svd_A.rows());
