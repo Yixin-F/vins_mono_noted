@@ -1,7 +1,7 @@
 #include "initial_alignment.h"
 
 /**
- * @brief 求解陀螺仪零偏，同时利用求出来的零偏重新进行预积分
+ * @brief 利用滑窗内图像求解陀螺仪零偏，同时用求出来的零偏重新进行预积分
  * 
  * @param[in] all_image_frame 
  * @param[in] Bgs 
