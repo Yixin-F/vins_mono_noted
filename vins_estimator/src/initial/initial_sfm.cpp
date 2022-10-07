@@ -3,7 +3,7 @@
 GlobalSFM::GlobalSFM(){}
 
 /**
- * @brief 对特征点三角化
+ * @brief 对特征点三角化，手写
  * 
  * @param[in] Pose0 两帧位姿
  * @param[in] Pose1 
@@ -31,7 +31,7 @@ void GlobalSFM::triangulatePoint(Eigen::Matrix<double, 3, 4> &Pose0, Eigen::Matr
 }
 
 /**
- * @brief 根据上一帧的位姿通过pnp求解当前帧的位姿
+ * @brief 根据上一帧的位姿通过pnp求解当前帧的位姿，使用cv库里的函数
  * 
  * @param[in] R_initial 上一帧的位姿
  * @param[in] P_initial 
@@ -170,7 +170,7 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 	// have relative_r relative_t
 	// intial two view
 	// 枢纽帧设置为单位帧，也可以理解为世界系原点
-	q[l].w() = 1;
+	q[l].w() = 1;  // q是指针，当数组用
 	q[l].x() = 0;
 	q[l].y() = 0;
 	q[l].z() = 0;
@@ -192,9 +192,11 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 	Eigen::Matrix<double, 3, 4> Pose[frame_num];
 
 	// 将枢纽帧和最后一帧Twc转成Tcw，包括四元数，旋转矩阵，平移向量和增广矩阵
+	// ! 这里涉及一个坐标系反向推导的公式
 	c_Quat[l] = q[l].inverse();
 	c_Rotation[l] = c_Quat[l].toRotationMatrix();
 	c_Translation[l] = -1 * (c_Rotation[l] * T[l]);
+
 	Pose[l].block<3, 3>(0, 0) = c_Rotation[l];
 	Pose[l].block<3, 1>(0, 3) = c_Translation[l];
 
@@ -318,7 +320,7 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 		// 单目+IMU存在4自由度不可观：Yaw与3平移，pitch与roll因重力而可观，尺度因加速度计而可观
 		// 因此在调试对应slam系统中，如果出现问题，一定要考虑到可观性/能观性问题
 
-		// fix设置的世界坐标系第l帧的位姿，同时fix最后一帧的位移用来fix尺度
+		// ! fix设置的世界坐标系第l帧的位姿，同时fix最后一帧的位移用来fix尺度
 		if (i == l)
 		{
 			problem.SetParameterBlockConstant(c_rotation[i]);

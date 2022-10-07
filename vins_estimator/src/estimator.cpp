@@ -343,7 +343,7 @@ bool Estimator::initialStructure()
     }
 
     // Step 3 solve pnp for all frame
-    // 只是针对KF进行sfm，初始化需要all_image_frame中的所有元素，因此下面通过KF来求解其他的非KF的位姿
+    // ! 只是针对KF进行sfm，初始化需要all_image_frame中的所有元素，因此下面通过KF来求解其他的非KF的位姿
     map<double, ImageFrame>::iterator frame_it;
     map<int, Vector3d>::iterator it;
     frame_it = all_image_frame.begin( );
@@ -417,13 +417,13 @@ bool Estimator::initialStructure()
         cv::cv2eigen(t, T_pnp);
         T_pnp = R_pnp * (-T_pnp);
         // Twc -> Twi
-        // 由于尺度未恢复，因此平移暂时不转到imu系
+        // ! 由于尺度未恢复，因此平移暂时不转到imu系，尺度需要通过重力方向对齐来恢复
         frame_it->second.R = R_pnp * RIC[0].transpose();
         frame_it->second.T = T_pnp;
     }
     
     // 到此就求解出用来做视觉惯性对齐的所有视觉帧的位姿
-    // Step 4 视觉惯性对齐
+    // Step 4 视觉惯性对齐，恢复尺度
     if (visualInitialAlign())
         return true;
     else
@@ -538,7 +538,7 @@ bool Estimator::relativePose(Matrix3d &relative_R, Vector3d &relative_T, int &l)
     for (int i = 0; i < WINDOW_SIZE; i++)
     {
         vector<pair<Vector3d, Vector3d>> corres;
-        corres = f_manager.getCorresponding(i, WINDOW_SIZE);   // 第i帧和最后一帧的关联特征
+        corres = f_manager.getCorresponding(i, WINDOW_SIZE);   // ! 第i帧和最后一帧的关联特征
         // 要求共视的特征点足够多
         if (corres.size() > 20)
         {
