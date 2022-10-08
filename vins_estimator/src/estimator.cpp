@@ -824,7 +824,7 @@ void Estimator::optimization()
     }
     // 实际上还有地图点，其实平凡的参数块不需要调用AddParameterBlock，增加残差块接口时会自动绑定
     TicToc t_whole, t_prepare;
-    // eigen -> double
+    // ! eigen -> double，参数块都是Eigen格式的，但是在优化过程中使用的是double类型的数组
     vector2double();
     // Step 2 通过残差约束来添加残差块，类似g2o的边
     // 上一次的边缘化结果作为这一次的先验
