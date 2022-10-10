@@ -998,7 +998,7 @@ void Estimator::optimization()
         }
         // 只有第1个预积分和待边缘化参数块相连
         {
-            if (pre_integrations[1]->sum_dt < 10.0)
+            if (pre_integrations[1]->sum_dt < 10.0)  // 超过10置信度比较低
             {
                 // 跟构建ceres约束问题一样，这里也需要得到残差和雅克比
                 IMUFactor* imu_factor = new IMUFactor(pre_integrations[1]);

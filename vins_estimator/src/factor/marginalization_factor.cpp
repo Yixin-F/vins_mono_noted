@@ -107,14 +107,14 @@ void MarginalizationInfo::addResidualBlockInfo(ResidualBlockInfo *residual_block
     {
         double *addr = parameter_blocks[i];
         int size = parameter_block_sizes[i];
-        // 这里是个map，避免重复添加
+        // 这里是个unordered map，避免重复添加
         parameter_block_size[reinterpret_cast<long>(addr)] = size;  // 地址->global size
     }
     // 待边缘化的参数块
     for (int i = 0; i < static_cast<int>(residual_block_info->drop_set.size()); i++)
     {
         double *addr = parameter_blocks[residual_block_info->drop_set[i]];
-        // 先准备好待边缘化的参数块的map
+        // 先准备好待边缘化的参数块的unordered map 
         parameter_block_idx[reinterpret_cast<long>(addr)] = 0;
     }
 }
