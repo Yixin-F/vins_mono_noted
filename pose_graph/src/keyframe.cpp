@@ -560,7 +560,7 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
 	    //printf("PNP relative\n");
 	    //cout << "pnp relative_t " << relative_t.transpose() << endl;
 	    //cout << "pnp relative_yaw " << relative_yaw << endl;
-			// 合理范围之内才认为有效
+			// 合理范围之内才认为有效，yaw太大会导致Mono视野不同，必定不是回环
 	    if (abs(relative_yaw) < 30.0 && relative_t.norm() < 20.0)
 	    {
 

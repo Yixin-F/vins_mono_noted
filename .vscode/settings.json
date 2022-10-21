@@ -44,7 +44,8 @@
         "files.associations": {
             "nonlinearoptimization": "cpp",
             "*.txx": "cpp",
-            "*.ipp": "cpp"
+            "*.ipp": "cpp",
+            "iosfwd": "cpp"
         },
         "todo-tree.tree.scanMode": "workspace"
 }

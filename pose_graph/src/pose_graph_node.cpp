@@ -542,6 +542,7 @@ int main(int argc, char **argv)
         fout.close();
         fsSettings.release();
 
+        // prior map load
         if (LOAD_PREVIOUS_POSE_GRAPH)
         {
             printf("load pose graph\n");
