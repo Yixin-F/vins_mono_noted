@@ -12,7 +12,7 @@
 class Utility
 {
   public:
-    // 旋转增量转换为四元数
+    // 旋转增量转换为四元数，极小的旋转增量
     template <typename Derived>
     static Eigen::Quaternion<typename Derived::Scalar> deltaQ(const Eigen::MatrixBase<Derived> &theta)
     {
