@@ -18,7 +18,7 @@ queue<sensor_msgs::ImageConstPtr> img_buf;
 ros::Publisher pub_img,pub_match;
 ros::Publisher pub_restart;
 
-FeatureTracker trackerData[NUM_OF_CAM];
+FeatureTracker trackerData[NUM_OF_CAM];  // 多相机
 double first_image_time;
 int pub_count = 1;
 bool first_image_flag = true;
@@ -47,7 +47,7 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
         pub_count = 1;
         std_msgs::Bool restart_flag;
         restart_flag.data = true;
-        pub_restart.publish(restart_flag);  // 告诉其他模块要重启了
+        pub_restart.publish(restart_flag);  // > 告诉其他模块要重启了
         return;
     }
     last_image_time = img_msg->header.stamp.toSec();

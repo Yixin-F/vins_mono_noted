@@ -15,7 +15,7 @@
 
 Estimator estimator;
 
-std::condition_variable con;
+std::condition_variable con; // 锁条件
 double current_time = -1;
 queue<sensor_msgs::ImuConstPtr> imu_buf;
 queue<sensor_msgs::PointCloudConstPtr> feature_buf;
@@ -67,13 +67,13 @@ void predict(const sensor_msgs::ImuConstPtr &imu_msg)
     double rz = imu_msg->angular_velocity.z;
     Eigen::Vector3d angular_velocity{rx, ry, rz};
 
-    // ! 一次中值积分
+    // ! 连续两帧imu之间采取中值积分的方式来更新PVQ(先Q后PV)
     // 上一时刻世界坐标系下加速度值
     Eigen::Vector3d un_acc_0 = tmp_Q * (acc_0 - tmp_Ba) - estimator.g;
     // 中值陀螺仪的结果
     Eigen::Vector3d un_gyr = 0.5 * (gyr_0 + angular_velocity) - tmp_Bg;
 
-    // ! 更新姿态，tmp_Q 是全局变量姿态
+    // 更新姿态，tmp_Q 是全局变量姿态，当前imu帧的在世界坐标中姿态
     tmp_Q = tmp_Q * Utility::deltaQ(un_gyr * dt);
 
     // 当前时刻世界坐标系下的加速度值
@@ -81,7 +81,7 @@ void predict(const sensor_msgs::ImuConstPtr &imu_msg)
     // 加速度中值积分的值
     Eigen::Vector3d un_acc = 0.5 * (un_acc_0 + un_acc_1);
 
-    // ! 经典物理中位置，速度更新方程，tmp_P、tmp_V是全局变量位置和速度
+    // 经典物理中值积分，速度更新方程，tmp_P、tmp_V是全局变量位置和速度
     tmp_P = tmp_P + dt * tmp_V + 0.5 * dt * dt * un_acc;
     tmp_V = tmp_V + dt * un_acc;
 
@@ -89,7 +89,7 @@ void predict(const sensor_msgs::ImuConstPtr &imu_msg)
     gyr_0 = angular_velocity;
 }
 
-// 用最新VIO结果更新最新imu对应的位姿
+// 用最新VIO结果更新最新imu对应的位姿，这个最新VIO结果是指上一个滑窗的最后PVQ和Bias
 void update()
 {
     TicToc t_predict;
@@ -99,14 +99,13 @@ void update()
     tmp_V = estimator.Vs[WINDOW_SIZE];
     tmp_Ba = estimator.Bas[WINDOW_SIZE];
     tmp_Bg = estimator.Bgs[WINDOW_SIZE];
-    acc_0 = estimator.acc_0;
+    acc_0 = estimator.acc_0;   // 此时的acc_0是滑窗的最后一个
     gyr_0 = estimator.gyr_0;
 
     queue<sensor_msgs::ImuConstPtr> tmp_imu_buf = imu_buf;  // 遗留的imu的buffer，因为下面需要pop，所以copy了一份
     for (sensor_msgs::ImuConstPtr tmp_imu_msg; !tmp_imu_buf.empty(); tmp_imu_buf.pop())
         // 得到最新imu时刻的可靠的位姿
-        predict(tmp_imu_buf.front());
-
+        predict(tmp_imu_buf.front());  // 通过中值积分一直得到最后一个Imu的PVQ
 }
 
 // 获得匹配好的图像imu组，imu覆盖图像帧
@@ -122,7 +121,7 @@ getMeasurements()
  
         // imu                 *******
         // image          *****
-        // ? 这就是imu还没来？？ 这个队列到底是怎么存取的
+        // ? 这就是imu还没来？？ 这个队列到底是怎么存取的?
         if (!(imu_buf.back()->header.stamp.toSec() > feature_buf.front()->header.stamp.toSec() + estimator.td))
         {
             //ROS_WARN("wait for imu, only should happen at the beginning");
@@ -131,7 +130,7 @@ getMeasurements()
         }
 
         // imu           ******
-        // image    ******
+        // image    *****
         // 这种只能扔掉一些image帧
         if (!(imu_buf.front()->header.stamp.toSec() < feature_buf.front()->header.stamp.toSec() + estimator.td))
         {
@@ -167,7 +166,7 @@ getMeasurements()
 
 
 /**
- * @brief imu消息存进buffer，同时按照imu频率预测位姿并发送，这样就可以提高里程计频率
+ * @brief imu消息存进buffer，同时按照imu频率通过predict()预测位姿并发送
  * 
  * @param[in] imu_msg 
  */
@@ -189,18 +188,18 @@ void imu_callback(const sensor_msgs::ImuConstPtr &imu_msg)
 
     {
         std::lock_guard<std::mutex> lg(m_state);  // 自动规定上锁的生存周期  {......}内部生存
-        predict(imu_msg);   //? 中值积分用掉了此次imu，预测了一个位姿，有什么用？？
+        predict(imu_msg);   //? 中值积分用掉了此次imu，预测了一个位姿，有什么用？？这里可以理解为更新了PVQ一次
         std_msgs::Header header = imu_msg->header;
         header.frame_id = "world";
 
         // 只有初始化完成后才发送当前结果
         if (estimator.solver_flag == Estimator::SolverFlag::NON_LINEAR)
-            pubLatestOdometry(tmp_P, tmp_Q, tmp_V, header);
+            pubLatestOdometry(tmp_P, tmp_Q, tmp_V, header);   // rviz发布了此次predict()的位姿
     }
 }
 
 /**
- * @brief 将前端信息送进buffer
+ * @brief 单纯将前端信息送进buffer
  * 
  * @param[in] feature_msg 
  */
@@ -226,7 +225,7 @@ void feature_callback(const sensor_msgs::PointCloudConstPtr &feature_msg)
 
 void restart_callback(const std_msgs::BoolConstPtr &restart_msg)
 {
-    if (restart_msg->data == true)
+    if (restart_msg->data == true)   // restart_msg->data是前端跟踪发布的
     {
         ROS_WARN("restart the estimator!");
         m_buf.lock();
@@ -278,7 +277,7 @@ void process()
             for (auto &imu_msg : measurement.first)
             {
                 double t = imu_msg->header.stamp.toSec();
-                double img_t = img_msg->header.stamp.toSec() + estimator.td;
+                double img_t = img_msg->header.stamp.toSec() + estimator.td;  // 加了一个延时
                 if (t <= img_t)
                 { 
                     if (current_time < 0)

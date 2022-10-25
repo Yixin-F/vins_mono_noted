@@ -7,7 +7,7 @@ bool inBorder(const cv::Point2f &pt)
     const int BORDER_SIZE = 1;
     int img_x = cvRound(pt.x);
     int img_y = cvRound(pt.y);
-    return BORDER_SIZE <= img_x && img_x < COL - BORDER_SIZE && BORDER_SIZE <= img_y && img_y < ROW - BORDER_SIZE;
+    return BORDER_SIZE <= img_x && img_x < COL - BORDER_SIZE && BORDER_SIZE <= img_y && img_y < ROW - BORDER_SIZE;   // 在一个方框内
 }
 
 // > 双指针，根据状态位，进行“瘦身”
@@ -44,10 +44,11 @@ void FeatureTracker::setMask()
     
 
     // prefer to keep features that are tracked for long time
-    vector<pair<int, pair<cv::Point2f, int>>> cnt_pts_id;
+    vector<pair<int, pair<cv::Point2f, int>>> cnt_pts_id;   // <跟踪次数，<跟踪点，id>>
 
     for (unsigned int i = 0; i < forw_pts.size(); i++)
         cnt_pts_id.push_back(make_pair(track_cnt[i], make_pair(forw_pts[i], ids[i])));
+
     // 利用光流特点，追踪多的稳定性好，排前面
     // > 排序函数一定不能声明在类内，因为std无法访问类内函数，一是像这样可以，二是声明为全局函数
     sort(cnt_pts_id.begin(), cnt_pts_id.end(), [](const pair<int, pair<cv::Point2f, int>> &a, const pair<int, pair<cv::Point2f, int>> &b)
@@ -59,14 +60,16 @@ void FeatureTracker::setMask()
     ids.clear();
     track_cnt.clear();
 
+    // 将跟踪好坏得到的特征点集，再次检查是否被mask，并且防止过度集中
     for (auto &it : cnt_pts_id)
     {
-        if (mask.at<uchar>(it.second.first) == 255)
+        if (mask.at<uchar>(it.second.first) == 255)  // 检测该点是否被mask覆盖
         {
             // 把挑选剩下的特征点重新放进容器
             forw_pts.push_back(it.second.first);
             ids.push_back(it.second.second);
             track_cnt.push_back(it.first);
+
             // opencv函数，把周围一个圆内全部置0,这个区域不允许别的特征点存在，避免特征点过于集中
             // > orb2中是使用四叉树来实现特征均匀分配，虽然这样更规格，但是远没有vins的该方法快，毕竟vins特征跟踪数量远高于orb2的orb特征提取
             cv::circle(mask, it.second.first, MIN_DIST, 0, -1);
