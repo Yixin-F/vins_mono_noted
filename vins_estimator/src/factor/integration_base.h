@@ -7,6 +7,7 @@
 using namespace Eigen;
 
 // ! 预积分的所有操作都在IntegrationBase里
+// ! 前向积分-中值积分；协方差和雅克比更新
 class IntegrationBase
 {
   public:
@@ -14,9 +15,9 @@ class IntegrationBase
 
     // ! 预积分构造函数 
     // 构造函数输入是初始时刻加速度、角速度、加速度零偏、角速度零偏
-    // 雅克比赋值单位阵，15X15，其实只需要维护delta_p(alpha)、delta_v(beta)、delta_q(gamma)对两个零偏的雅克比，但是这里直接维护15X15，一开始谁也与谁无关，所以初始化为单位阵
+    // 雅克比赋值单位阵，15X15，其实只需要维护delta_p(alpha)(3)、delta_v(beta)(3)、delta_q(gamma)(3)(旋转向量形式)对两个零偏(6)的雅克比(导数)，但是这里直接维护15X15，一开始谁也与谁无关，所以初始化为单位阵
     // 协方差初始化为零矩阵，delta_p和delta_v初始化为0，delta_q初始化为单位四元数
-    // 噪声noise 18X18，通过yaml来初始化，关于上一时刻加速度计、陀螺仪噪声，下一时刻加速度计、陀螺仪噪声，两个零偏噪声(随机游走)
+    // 噪声noise 18X18，通过yaml来初始化，关于上一时刻加速度计(3)、陀螺仪噪声(3)，下一时刻加速度计(3)、陀螺仪噪声(3)，两个零偏噪声(6)(随机游走)
     IntegrationBase(const Eigen::Vector3d &_acc_0, const Eigen::Vector3d &_gyr_0,
                     const Eigen::Vector3d &_linearized_ba, const Eigen::Vector3d &_linearized_bg)
         : acc_0{_acc_0}, gyr_0{_gyr_0}, linearized_acc{_acc_0}, linearized_gyr{_gyr_0},

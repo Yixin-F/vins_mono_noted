@@ -55,7 +55,7 @@ int FeatureManager::getFeatureCount()
  * @return true 
  * @return false 
  */
-
+// ? map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image   ->  <featureid, <?, ?>>
 bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, double td)
 {
     ROS_DEBUG("input feature: %d", (int)image.size());
@@ -70,7 +70,7 @@ bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vec
         FeaturePerFrame f_per_fra(id_pts.second[0].second, td);
 
         int feature_id = id_pts.first;
-        // 在已有的id中寻找是否是有相同的特征点
+        // 在已有的id中寻找是否是有相同的特征点，feature存储了所有特征
         auto it = find_if(feature.begin(), feature.end(), [feature_id](const FeaturePerId &it)
                           {
             return it.feature_id == feature_id;

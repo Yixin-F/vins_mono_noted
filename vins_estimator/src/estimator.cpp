@@ -103,7 +103,7 @@ void Estimator::processIMU(double dt, const Vector3d &linear_acceleration, const
         gyr_0 = angular_velocity;
     }
     
-    // 滑窗中保留11帧，frame_count表示现在处理第几帧，一般处理到第11帧时就保持不变了
+    // 滑窗中保留11帧，frame_count表示现在处理第几帧(每两帧之间有一个预积分对象)，一般处理到第11帧时就保持不变了
     // 由于预积分是帧间约束，因此第1个预积分量实际上是用不到的
     if (!pre_integrations[frame_count])
     {
@@ -116,7 +116,7 @@ void Estimator::processIMU(double dt, const Vector3d &linear_acceleration, const
         //if(solver_flag != NON_LINEAR)
 
             // !  这个量用来做初始化用的
-            tmp_pre_integration->push_back(dt, linear_acceleration, angular_velocity);
+            tmp_pre_integration->push_back(dt, linear_acceleration, angular_velocity);   // 它存储了更多imu数据
 
         // 保存传感器数据
         dt_buf[frame_count].push_back(dt);
@@ -171,7 +171,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         ROS_INFO("calibrating extrinsic param, rotation movement is needed");
         if (frame_count != 0)
         {
-            // 这里标定imu和相机的旋转外参的初值
+            // 这里标定imu和相机的旋转外参的初值，因为平移外参对系统正常运行影响很小
             // 因为预积分是相邻帧的约束，因为这里得到的图像关联也是相邻的
             vector<pair<Vector3d, Vector3d>> corres = f_manager.getCorresponding(frame_count - 1, frame_count); // 取出相邻图像帧之间的共识点
             Matrix3d calib_ric;
@@ -196,7 +196,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
             // Step 3： VIO初始化
             if( ESTIMATE_EXTRINSIC != 2 && (header.stamp.toSec() - initial_timestamp) > 0.1)
             {
-               result = initialStructure(); 
+               result = initialStructure();    // 纯SFM
                initial_timestamp = header.stamp.toSec();
             }
             if(result)
@@ -273,7 +273,7 @@ bool Estimator::initialStructure()
         for (frame_it = all_image_frame.begin(), frame_it++; frame_it != all_image_frame.end(); frame_it++)
         {
             double dt = frame_it->second.pre_integration->sum_dt;
-            Vector3d tmp_g = frame_it->second.pre_integration->delta_v / dt;
+            Vector3d tmp_g = frame_it->second.pre_integration->delta_v / dt;  // ? 加速度就是重力？？？
             // 累加每一帧带重力加速度的deltav
             sum_g += tmp_g;
         }

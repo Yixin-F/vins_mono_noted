@@ -9,6 +9,15 @@ InitialEXRotation::InitialEXRotation(){
 }
 
 // > 标定imu和相机之间的旋转外参，通过imu和图像计算的旋转使用手眼标定计算获得
+/**
+ * @brief 标定相机与imu之间的旋转外参
+ * 
+ * @param corres  两帧图像之间的关联特征
+ * @param delta_q_imu  根据Imu预积分得到的两帧之间的旋闸旋转变化
+ * @param calib_ric_result  连续多帧之间都满足图像对极几何结果等于imu预积分结果，最终多组帧间关系拟合得到旋转外参
+ * @return true 
+ * @return false 
+ */
 bool InitialEXRotation::CalibrationExRotation(vector<pair<Vector3d, Vector3d>> corres, Quaterniond delta_q_imu, Matrix3d &calib_ric_result)
 {
     frame_count++;
