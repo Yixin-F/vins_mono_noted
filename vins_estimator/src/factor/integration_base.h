@@ -42,7 +42,7 @@ class IntegrationBase
         dt_buf.push_back(dt);
         acc_buf.push_back(acc);
         gyr_buf.push_back(gyr);
-        propagate(dt, acc, gyr);
+        propagate(dt, acc, gyr);   // ! 最基本的一次预积分
     }
 
     /**
@@ -71,7 +71,7 @@ class IntegrationBase
     }
 
     // ! main
-    // ! 中值积分用于离散化后相邻两帧imu之间的预积分
+    // ! 中值积分用于离散化后相邻两帧imu之间的预积分，ESKF仅用于协方差和雅克比的更新
     // 时间，上一帧加速度计读数、陀螺仪读数，当前帧加速度计读数、陀螺仪读数，上一帧5个优化量，下一帧5个优化量，雅克比更新标志
     void midPointIntegration(double _dt, 
                             const Eigen::Vector3d &_acc_0, const Eigen::Vector3d &_gyr_0,
@@ -84,11 +84,12 @@ class IntegrationBase
         //ROS_INFO("midpoint integration");
 
         // Step 1 首先相邻两帧Imu之间中值积分更新状态量
-        Vector3d un_acc_0 = delta_q * (_acc_0 - linearized_ba);  // 将加速值转到世界坐标系下
+        // |---------------|       “|”代表图像帧，“-”代表imu帧
+        Vector3d un_acc_0 = delta_q * (_acc_0 - linearized_ba);  // ? 转到开始图像帧坐标系下，为什么看起来“乘以位姿应该是回到世界坐标系？”，实际上每两图像帧之间都各自的预积分类！
         Vector3d un_gyr = 0.5 * (_gyr_0 + _gyr_1) - linearized_bg;  // 陀螺仪中值
         result_delta_q = delta_q * Quaterniond(1, un_gyr(0) * _dt / 2, un_gyr(1) * _dt / 2, un_gyr(2) * _dt / 2);  // 后面一个四元数的构建，实部+3个虚部，里面有个delta_t里陀螺仪读数使得近似
         Vector3d un_acc_1 = result_delta_q * (_acc_1 - linearized_ba);
-        Vector3d un_acc = 0.5 * (un_acc_0 + un_acc_1);
+        Vector3d un_acc = 0.5 * (un_acc_0 + un_acc_1);  // 加速度计中值
         result_delta_p = delta_p + delta_v * _dt + 0.5 * un_acc * _dt * _dt;
         result_delta_v = delta_v + un_acc * _dt;
         result_linearized_ba = linearized_ba;  // 零偏是假设不变的
