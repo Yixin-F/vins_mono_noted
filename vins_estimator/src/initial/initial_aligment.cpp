@@ -68,7 +68,7 @@ MatrixXd TangentBasis(Vector3d &g0)
 void RefineGravity(map<double, ImageFrame> &all_image_frame, Vector3d &g, VectorXd &x)
 {
     // 参考论文
-    Vector3d g0 = g.normalized() * G.norm();
+    Vector3d g0 = g.normalized() * G.norm();   // G先验
     Vector3d lx, ly;
     //VectorXd x;
     int all_frame_count = all_image_frame.size();
@@ -88,7 +88,7 @@ void RefineGravity(map<double, ImageFrame> &all_image_frame, Vector3d &g, Vector
         int i = 0;
         for (frame_i = all_image_frame.begin(); next(frame_i) != all_image_frame.end(); frame_i++, i++)
         {
-            frame_j = next(frame_i);
+            frame_j = next(frame_i);   // next指下一帧
 
             MatrixXd tmp_A(6, 9);
             tmp_A.setZero();
