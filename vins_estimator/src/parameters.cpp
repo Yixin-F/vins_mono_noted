@@ -54,7 +54,7 @@ void readParameters(ros::NodeHandle &n)
     SOLVER_TIME = fsSettings["max_solver_time"];    // 单次优化最大求解时间
     NUM_ITERATIONS = fsSettings["max_num_iterations"];  // 单词优化最大迭代次数
     MIN_PARALLAX = fsSettings["keyframe_parallax"]; // 根据视差确定关键帧
-    MIN_PARALLAX = MIN_PARALLAX / FOCAL_LENGTH;
+    MIN_PARALLAX = MIN_PARALLAX / FOCAL_LENGTH; // 虚拟相机的trick
 
     std::string OUTPUT_PATH;
     fsSettings["output_path"] >> OUTPUT_PATH;
@@ -69,16 +69,16 @@ void readParameters(ros::NodeHandle &n)
 
     // imu、图像相关参数
     ACC_N = fsSettings["acc_n"];  // nosie
-    ACC_W = fsSettings["acc_w"];  // bias
+    ACC_W = fsSettings["acc_w"];  // > 随机游走，随机游走指的是零偏的随机性
     GYR_N = fsSettings["gyr_n"];  // noise
-    GYR_W = fsSettings["gyr_w"];  // bias
+    GYR_W = fsSettings["gyr_w"];  // 随机游走
     G.z() = fsSettings["g_norm"];  // g
     ROW = fsSettings["image_height"];
     COL = fsSettings["image_width"];
     ROS_INFO("ROW: %f COL: %f ", ROW, COL);
 
     ESTIMATE_EXTRINSIC = fsSettings["estimate_extrinsic"];  // ! 是否在线标定外参
-    if (ESTIMATE_EXTRINSIC == 2)
+    if (ESTIMATE_EXTRINSIC == 2)  // 无先验
     {
         ROS_WARN("have no prior about extrinsic param, calibrate extrinsic param");
         RIC.push_back(Eigen::Matrix3d::Identity());
@@ -88,12 +88,12 @@ void readParameters(ros::NodeHandle &n)
     }
     else 
     {
-        if ( ESTIMATE_EXTRINSIC == 1)
+        if ( ESTIMATE_EXTRINSIC == 1)  // 有先验
         {
             ROS_WARN(" Optimize extrinsic param around initial guess!");
             EX_CALIB_RESULT_PATH = OUTPUT_PATH + "/extrinsic_parameter.csv";
         }
-        if (ESTIMATE_EXTRINSIC == 0)
+        if (ESTIMATE_EXTRINSIC == 0)  // 固定
             ROS_WARN(" fix extrinsic param ");
 
         cv::Mat cv_R, cv_T;

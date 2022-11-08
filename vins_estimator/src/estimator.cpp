@@ -18,7 +18,7 @@ void Estimator::setParameter()
         ric[i] = RIC[i];
     }
     f_manager.setRic(ric);
-    // 这里可以看到虚拟相机的用法，1.5个像素误差
+    // 这里可以看到虚拟相机的用法，1.5个像素误差，给了个重投影误差的准确度
     ProjectionFactor::sqrt_info = FOCAL_LENGTH / 1.5 * Matrix2d::Identity();
     ProjectionTdFactor::sqrt_info = FOCAL_LENGTH / 1.5 * Matrix2d::Identity();
     td = TD;
@@ -88,7 +88,7 @@ void Estimator::clearState()
 }
 
 /**
- * @brief 对imu数据进行处理，包括更新预积分量，和提供优化状态量的初始值
+ * @brief 维护了一个滑窗内的11个预积分量，对imu数据进行处理，包括更新预积分量，和提供优化状态量的初始值
  * 
  * @param[in] dt 
  * @param[in] linear_acceleration 
@@ -103,14 +103,14 @@ void Estimator::processIMU(double dt, const Vector3d &linear_acceleration, const
         gyr_0 = angular_velocity;
     }
     
-    // 滑窗中保留11帧，frame_count表示现在处理第几帧(每两帧之间有一个预积分对象)，一般处理到第11帧时就保持不变了
-    // 由于预积分是帧间约束，因此第1个预积分量实际上是用不到的
-    if (!pre_integrations[frame_count])
+    // ! 滑窗中保留11帧，维护11个预积分量，frame_count表示现在处理第几帧(每两帧之间有一个预积分对象)，一般处理到第11帧时就保持不变了
+    // ! 由于预积分是帧间约束，因此第1个预积分量实际上是用不到的
+    if (!pre_integrations[frame_count])  // 没有预积分头则创建
     {
         pre_integrations[frame_count] = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count]};
     }
-    // 所以只有大于0才处理，也就是说第一帧不处理，因为第一帧imu在最开头，并未产生图像帧间约束
-    if (frame_count != 0)
+    // ! 只有大于0才处理，也就是说第一帧不处理，因为第一帧imu在最开头，并未产生图像帧间约束
+    if (frame_count != 0)   // ! frame_count 后续会有+1，在processImage()中
     {
         pre_integrations[frame_count]->push_back(dt, linear_acceleration, angular_velocity);
         //if(solver_flag != NON_LINEAR)
@@ -118,30 +118,32 @@ void Estimator::processIMU(double dt, const Vector3d &linear_acceleration, const
             // !  这个量用来做初始化用的
             tmp_pre_integration->push_back(dt, linear_acceleration, angular_velocity);   // 它存储了更多imu数据
 
-        // 保存传感器数据
+        // 这次直接存储了imu加速度、加速度和时间，之前我们只是单纯地存储了imu的原始信息sensor_msg
         dt_buf[frame_count].push_back(dt);
         linear_acceleration_buf[frame_count].push_back(linear_acceleration);
         angular_velocity_buf[frame_count].push_back(angular_velocity);
 		
-        // ! 又是一个中值积分，更新滑窗中状态量，本质是给非线性优化提供可信的初始值
+        // ? 又是一个中值积分，更新滑窗中状态量，本质是给非线性优化提供可信的初始值？到底什么用？processImage()中初始化用的，因为VIOI初始化用到所有帧image，包括kf和非kf
+        // ? 因为滑窗内每个Image不一定都是kf，这就意味着是kf的image之间要重新预积分来更新，但是非kf之间的预积分量就丢失了，tmp_pre_integration只是用来事先填充每一帧(包括非kf)image之间的预积分
         int j = frame_count;         
         Vector3d un_acc_0 = Rs[j] * (acc_0 - Bas[j]) - g;
         Vector3d un_gyr = 0.5 * (gyr_0 + angular_velocity) - Bgs[j];
-        Rs[j] *= Utility::deltaQ(un_gyr * dt).toRotationMatrix();
+        Rs[j] *= Utility::deltaQ(un_gyr * dt).toRotationMatrix();   // ! 累乘
         Vector3d un_acc_1 = Rs[j] * (linear_acceleration - Bas[j]) - g;
         Vector3d un_acc = 0.5 * (un_acc_0 + un_acc_1);
-        Ps[j] += dt * Vs[j] + 0.5 * dt * dt * un_acc;
+        Ps[j] += dt * Vs[j] + 0.5 * dt * dt * un_acc;  // ! 累加
         Vs[j] += dt * un_acc;
     }
     acc_0 = linear_acceleration;
     gyr_0 = angular_velocity;
 }
 
+// 一是负责滑窗管理；二是负责vio初始化；三是这个接口比processImu()更重要
 void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, const std_msgs::Header &header)
 {
     ROS_DEBUG("new image coming ------------------------------------------");
     ROS_DEBUG("Adding feature points %lu", image.size());
-    // Step 1 将特征点信息加到f_manager这个特征点管理器中，同时进行是否关键帧的检查
+    // Step 1 将特征点信息加到f_manager这个特征点管理器中，同时进行是否关键帧的检查，确定边缘化操作
     if (f_manager.addFeatureCheckParallax(frame_count, image, td))
         // 如果上一帧是关键帧，则滑窗中最老的帧就要被移出滑窗
         marginalization_flag = MARGIN_OLD;
@@ -162,7 +164,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
     // 这里就是简单的把图像和预积分绑定在一起，这里预积分就是两帧之间的，滑窗中实际上是两个KF之间的
     // 实际上是准备用来初始化的相关数据
     all_image_frame.insert(make_pair(header.stamp.toSec(), imageframe));
-    tmp_pre_integration = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count]};
+    tmp_pre_integration = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count]};  // 预积分重新复位，覆盖信息
 
     // 没有外参初值
     // Step 2： 外参初始化
@@ -189,7 +191,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
 
     if (solver_flag == INITIAL)
     {
-        if (frame_count == WINDOW_SIZE) // 有足够的帧数
+        if (frame_count == WINDOW_SIZE) // 有足够的帧数，滑窗已经满了
         {
             bool result = false;
             // 要有可信的外参值，同时距离上次初始化不成功至少相邻0.1s
@@ -256,7 +258,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
 }
 
 /**
- * @brief VIO初始化，将滑窗中的P V Q恢复到第0帧并且和重力对齐
+ * @brief VIO初始化，将滑窗中的P V Q恢复，并求处地图点，并视觉与imu对齐
  * 
  * @return true 
  * @return false 
@@ -271,7 +273,7 @@ bool Estimator::initialStructure()
         Vector3d sum_g;
         // 从第二帧开始检查imu
         for (frame_it = all_image_frame.begin(), frame_it++; frame_it != all_image_frame.end(); frame_it++)
-        {
+        {  // ! 使用all_image_frame中的所有帧
             double dt = frame_it->second.pre_integration->sum_dt;
             Vector3d tmp_g = frame_it->second.pre_integration->delta_v / dt;  // ? 加速度就是重力？？？
             // 累加每一帧带重力加速度的deltav
@@ -365,7 +367,7 @@ bool Estimator::initialStructure()
         {
             i++;
         }
-        // 最近的KF提供一个初始值，Twc -> Tcw
+        // ! 最近的KF提供一个初始值，Twc -> Tcw
         Matrix3d R_inital = (Q[i].inverse()).toRotationMatrix();
         Vector3d P_inital = - R_inital * T[i];
         // eigen -> cv

@@ -31,3 +31,28 @@
 4.4 协方差更新(自写)
     xi+1 = A*xi + B*ni   其中，xi的协方差是Pi，ni的协方差是Vi
     则，xi+1的协方差是A*Pi*AT + B*Vi*BT
+
+5 VIO初始化(上)
+5.1 初始化做了什么？
+    包括纯视觉SFM和视觉与IMU对齐
+    为什么初始化？因为整个系统是基于优化的，所以非常依赖于初始值
+    初始化哪些变量？外参(旋转与平移)、零偏、地图点、PVQ
+    但是加速度计零偏和平移外参一般不会初始化估计，加速度计零偏因包含重力所以不好求(甚至可以给个0左右的值影响也不大)，平移外参可以很容易通过外部工具直接测量(尺子)
+5.2 数据预处理(1)
+    读取yaml、条件锁
+    imu_callback()读取imu数据存buf，并使用中值积分发布imu里程计
+    feature_callback()读前端光流跟踪结果存buf
+    process()结合imu_callback()和feature_callback()，通过时间戳整理若干组imu与视觉feature的组合，单独开辟一个线程且while(true)循环
+5.3 数据预处理(2)
+    processImu()处理process()所给组合中的imu数据，进行了预积分，这个预积分是每个滑窗内图像帧(包括kf和非kf)之间的预积分
+    processImage()处理process()所给组合中的feature数据，进行滑窗内的边缘化和VIO初始化
+5.4 数据预处理(3)
+    processImage()处理process()所给组合中的feature数据，进行滑窗内的边缘化和VIO初始化
+    先是addFeatureCheckParallax()添加所有特征点并且通过视差来判断是否是关键帧
+5.5 旋转外参初始化
+    多帧imu帧和图像帧同时构建超定方程，然后SVD分解
+
+6 VIO初始化(下)
+6.1&6.2 单目视觉位姿估计
+    initialStructure()包括imu激励检测(其实作者抹去)、对kf进行纯视觉SFM得到枢纽帧与最后帧的位姿和地图点，并用pnp和三角化求其他kf的位姿和地图点、pnp和三角化求得all_image_frame中剩余帧帧(非kf)的位姿和地图点、视觉惯性对齐恢复尺度
+
