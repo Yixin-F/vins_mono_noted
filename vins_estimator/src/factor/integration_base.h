@@ -35,7 +35,7 @@ class IntegrationBase
         noise.block<3, 3>(15, 15) =  (GYR_W * GYR_W) * Eigen::Matrix3d::Identity();
     }
 
-    //  来一帧新的imu数据，时间、加速度计读数、陀螺仪读数
+    //  ! 来一帧新的imu数据，存储时间、加速度计读数、陀螺仪读数，并且同时已经完成了Imu的预积分工作
     void push_back(double dt, const Eigen::Vector3d &acc, const Eigen::Vector3d &gyr)
     {
         // 相关时间差和传感器数据保留，方便后续repropagate，重新传播发生在vio初始化当中

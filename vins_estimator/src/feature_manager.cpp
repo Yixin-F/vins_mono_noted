@@ -55,9 +55,8 @@ int FeatureManager::getFeatureCount()
  * @return true 
  * @return false 
  */
-// ? map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image   ->  <featureid, <?, ?>>
 bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, double td)
-{
+{   // ? map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image 什么格式？map<featureid, vector<?, 该特征在被看到帧中的信息>>
     ROS_DEBUG("input feature: %d", (int)image.size());
     ROS_DEBUG("num of feature: %d", getFeatureCount());
     double parallax_sum = 0;
@@ -67,15 +66,15 @@ bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vec
     for (auto &id_pts : image)
     {
         // 用特征点信息构造一个特征对象
-        FeaturePerFrame f_per_fra(id_pts.second[0].second, td);
+        FeaturePerFrame f_per_fra(id_pts.second[0].second, td);   // ? 取索引0？难道vector就一个？
 
-        int feature_id = id_pts.first;
-        // 在已有的id中寻找是否是有相同的特征点，feature存储了所有特征
+        int feature_id = id_pts.first;   // 特征id
+        // ! 在已有的id中寻找是否是有相同的特征点，feature存储了所有特征
         auto it = find_if(feature.begin(), feature.end(), [feature_id](const FeaturePerId &it)
                           {
             return it.feature_id == feature_id;
                           });
-        // 这是一个新的特征点
+        // 这是一个新的特征点，是在frame_count中代表帧中第一次被看到的
         if (it == feature.end())
         {
             // 在特征点管理器中，新创建一个特征点id，这里的frame_count就是该特征点在滑窗中的当前位置，作为这个特征点的起始位置
@@ -96,7 +95,7 @@ bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vec
     for (auto &it_per_id : feature)
     {
         // 计算的实际上是frame_count-1,也就是前一帧是否为关键帧
-        // 因此起始帧至少得是frame_count - 2,同时至少覆盖到frame_count - 1帧
+        // 因此起始帧至少得是frame_count - 2, 同时至少覆盖到frame_count - 1帧
         if (it_per_id.start_frame <= frame_count - 2 &&
             it_per_id.start_frame + int(it_per_id.feature_per_frame.size()) - 1 >= frame_count - 1)
         {
@@ -140,7 +139,7 @@ void FeatureManager::debugShow()
 }
 
 /**
- * @brief 得到同时被frame_count_l frame_count_r帧看到的特征点在各自的坐标
+ * @brief 得到同时被frame_count_l frame_count_r帧看到的特征点在各自的坐标，坐标是归一化后的坐标
  * 
  * @param[in] frame_count_l 
  * @param[in] frame_count_r 

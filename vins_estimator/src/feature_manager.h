@@ -15,7 +15,7 @@ using namespace Eigen;
 
 #include "parameters.h"
 
-// 特征属性
+// 某个特征点在被看到帧的属性
 class FeaturePerFrame
 {
   public:
@@ -31,9 +31,9 @@ class FeaturePerFrame
         cur_td = td;
     }
     double cur_td;
-    Vector3d point;
-    Vector2d uv;
-    Vector2d velocity;
+    Vector3d point;  // 归一化相机坐标，乘以深度便可得到世界坐标
+    Vector2d uv;   // 像素坐标
+    Vector2d velocity;  // 特征点速度
     double z;
     bool is_used;
     double parallax;
@@ -42,18 +42,18 @@ class FeaturePerFrame
     double dep_gradient;
 };
 
-// ? 特征点对象
+// 特征点对象
 class FeaturePerId
 {
   public:
-    const int feature_id;
-    int start_frame;   // ? 检测到该特征的最早帧
-    vector<FeaturePerFrame> feature_per_frame;  // ! 该id对应的特征点在每个帧中的属性
+    const int feature_id;  // id号
+    int start_frame;   // 滑窗内检测到该特征的最早帧
+    vector<FeaturePerFrame> feature_per_frame;  // 该id对应的特征点在被看到每个帧中的属性
 
     int used_num;
     bool is_outlier;
     bool is_margin;
-    double estimated_depth;
+    double estimated_depth;  // 在起始帧中的深度，与归一化坐标组合可得到世界坐标
     int solve_flag; // 0 haven't solve yet; 1 solve succ; 2 solve fail;  是否三角化成功
 
     Vector3d gt_p;

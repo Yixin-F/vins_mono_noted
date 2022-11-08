@@ -81,7 +81,7 @@ bool InitialEXRotation::CalibrationExRotation(vector<pair<Vector3d, Vector3d>> c
         return false;
 }
 
-// 对极约束求解E
+// 对极约束求解E，拿到的是相机归一化后的坐标
 Matrix3d InitialEXRotation::solveRelativeR(const vector<pair<Vector3d, Vector3d>> &corres)
 {
     if (corres.size() >= 9)
@@ -107,7 +107,7 @@ Matrix3d InitialEXRotation::solveRelativeR(const vector<pair<Vector3d, Vector3d>
         // test 4 result after decomposeE() by Triangulation
         double ratio1 = max(testTriangulation(ll, rr, R1, t1), testTriangulation(ll, rr, R1, t2));
         double ratio2 = max(testTriangulation(ll, rr, R2, t1), testTriangulation(ll, rr, R2, t2));
-        cv::Mat_<double> ans_R_cv = ratio1 > ratio2 ? R1 : R2;
+        cv::Mat_<double> ans_R_cv = ratio1 > ratio2 ? R1 : R2;   // 只关心R不关心t
 
         // 解出来的是R21，与imu预积分计算的相对参考系是反的，所以后面有个转置
         Matrix3d ans_R_eigen;
@@ -120,7 +120,7 @@ Matrix3d InitialEXRotation::solveRelativeR(const vector<pair<Vector3d, Vector3d>
 }
 
 /**
- * @brief 通过三角化来检查R t是否合理
+ * @brief 通过三角化后的深度来检查R t是否合理
  * 
  * @param[in] l l相机的观测
  * @param[in] r r相机的观测

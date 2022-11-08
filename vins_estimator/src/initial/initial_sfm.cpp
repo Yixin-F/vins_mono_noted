@@ -169,7 +169,7 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 	//cout << "set 0 and " << l << " as known " << endl;
 	// have relative_r relative_t
 	// intial two view
-	// 枢纽帧设置为单位帧，也可以理解为世界系原点
+	// ! 枢纽帧设置为单位帧，也可以理解为世界系原点
 	q[l].w() = 1;  // q是指针，当数组用
 	q[l].x() = 0;
 	q[l].y() = 0;
@@ -182,7 +182,7 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 	//cout << "init q_l " << q[l].w() << " " << q[l].vec().transpose() << endl;
 	//cout << "init t_l " << T[l].transpose() << endl;
 
-	// 由于纯视觉slam处理都是Tcw(世界向相机),包括orbslam，但是vins里这里的枢纽帧和最后一帧的位姿是是Twc相反的，因此下面把Twc转成Tcw
+	// ! 由于纯视觉slam处理都是Tcw(世界向相机),包括orbslam，但是vins里这里的枢纽帧和最后一帧的位姿是是Twc相反的，因此下面把Twc转成Tcw
 	// rotate to cam frame
 	Matrix3d c_Rotation[frame_num];
 	Vector3d c_Translation[frame_num];

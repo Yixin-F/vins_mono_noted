@@ -68,7 +68,7 @@ void predict(const sensor_msgs::ImuConstPtr &imu_msg)
     Eigen::Vector3d angular_velocity{rx, ry, rz};
 
     // ! 连续两帧imu之间采取中值积分的方式来更新PVQ(先Q后PV)
-    // 上一时刻世界坐标系下加速度值
+    // 转到该连续图像帧内的第一帧所在坐标系下
     Eigen::Vector3d un_acc_0 = tmp_Q * (acc_0 - tmp_Ba) - estimator.g;
     // 中值陀螺仪的结果
     Eigen::Vector3d un_gyr = 0.5 * (gyr_0 + angular_velocity) - tmp_Bg;
@@ -76,7 +76,7 @@ void predict(const sensor_msgs::ImuConstPtr &imu_msg)
     // 更新姿态，tmp_Q 是全局变量姿态，当前imu帧的在世界坐标中姿态
     tmp_Q = tmp_Q * Utility::deltaQ(un_gyr * dt);
 
-    // 当前时刻世界坐标系下的加速度值
+    // 转到该连续图像帧内的第一帧所在坐标系下
     Eigen::Vector3d un_acc_1 = tmp_Q * (linear_acceleration - tmp_Ba) - estimator.g;
     // 加速度中值积分的值
     Eigen::Vector3d un_acc = 0.5 * (un_acc_0 + un_acc_1);
@@ -119,9 +119,9 @@ getMeasurements()
         if (imu_buf.empty() || feature_buf.empty())
             return measurements;
  
-        // imu                 *******
-        // image          *****
-        // ? 这就是imu还没来？？ 这个队列到底是怎么存取的?
+        // imu     *******
+        // image                 *****
+        // ! 有个！取反操作，时间越小说明越早
         if (!(imu_buf.back()->header.stamp.toSec() > feature_buf.front()->header.stamp.toSec() + estimator.td))
         {
             //ROS_WARN("wait for imu, only should happen at the beginning");
@@ -129,7 +129,7 @@ getMeasurements()
             return measurements;  // 空的
         }
 
-        // imu           ******
+        // imu               ******
         // image    *****
         // 这种只能扔掉一些image帧
         if (!(imu_buf.front()->header.stamp.toSec() < feature_buf.front()->header.stamp.toSec() + estimator.td))
@@ -139,21 +139,24 @@ getMeasurements()
             continue;
         }
 
+        // ! 这边注意，用过的feature和imu直接pop了
         // 此时就保证了图像前一定有imu数据
         // 一般第一帧不会严格对齐，但是后面就都会对齐，当然第一帧也不会用到
         sensor_msgs::PointCloudConstPtr img_msg = feature_buf.front();
         feature_buf.pop();  // 用了就丢了
         
-        // 把该帧图像之前的Imu全都存起来
+        // 把该帧图像之前的Imu全都存起来，组合方式如下：
+        // imu  ******
+        // 图像          *
         //  ! 我们要明确一点，最开始存储的那一串imu其实没啥用，因为它不构成图像的帧间约束，它没得约束
         std::vector<sensor_msgs::ImuConstPtr> IMUs;
-        while (imu_buf.front()->header.stamp.toSec() < img_msg->header.stamp.toSec() + estimator.td)
+        while (imu_buf.front()->header.stamp.toSec() < img_msg->header.stamp.toSec() + estimator.td)  // imu覆盖feature
         {
             IMUs.emplace_back(imu_buf.front());
             imu_buf.pop();
         }
 
-        // 保留图像时间戳后一个imu数据，但不会从buffer中扔掉
+        // 额外保留图像时间戳后一个imu数据，确保imu完整地覆盖feature，但不会从buffer中扔掉
         // imu    *       *
         // image    *          插值
         IMUs.emplace_back(imu_buf.front());
@@ -188,7 +191,7 @@ void imu_callback(const sensor_msgs::ImuConstPtr &imu_msg)
 
     {
         std::lock_guard<std::mutex> lg(m_state);  // 自动规定上锁的生存周期  {......}内部生存
-        predict(imu_msg);   //? 中值积分用掉了此次imu，预测了一个位姿，有什么用？？这里可以理解为更新了PVQ一次
+        predict(imu_msg);   //? 预测了一个位姿，有什么用？？这里可以理解为仅用于RVIZ中的发布
         std_msgs::Header header = imu_msg->header;
         header.frame_id = "world";
 
@@ -316,6 +319,7 @@ void process()
                     //printf("dimu: dt:%f a: %f %f %f w: %f %f %f\n",dt_1, dx, dy, dz, rx, ry, rz);
                 }
             }
+            
             // set relocalization frame
             // 回环相关部分
             sensor_msgs::PointCloudConstPtr relo_msg = NULL;
@@ -409,9 +413,9 @@ int main(int argc, char **argv)
 
     // 注册一些publisher
     registerPub(n);
-    // 接受imu消息
+    // 接受imu消息存buf，并发布里程计
     ros::Subscriber sub_imu = n.subscribe(IMU_TOPIC, 2000, imu_callback, ros::TransportHints().tcpNoDelay());
-    // 接受前端视觉光流结果
+    // 接受前端视觉光流结果存buf
     ros::Subscriber sub_image = n.subscribe("/feature_tracker/feature", 2000, feature_callback);
     // 接受前端重启命令
     ros::Subscriber sub_restart = n.subscribe("/feature_tracker/restart", 2000, restart_callback);
