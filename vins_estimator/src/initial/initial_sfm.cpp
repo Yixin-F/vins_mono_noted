@@ -5,7 +5,7 @@ GlobalSFM::GlobalSFM(){}
 /**
  * @brief 对特征点三角化，手写
  * 
- * @param[in] Pose0 两帧位姿
+ * @param[in] Pose0 两帧位姿  3x4
  * @param[in] Pose1 
  * @param[in] point0 特征点在两帧下的观测
  * @param[in] point1 
@@ -17,7 +17,7 @@ void GlobalSFM::triangulatePoint(Eigen::Matrix<double, 3, 4> &Pose0, Eigen::Matr
 {
 	// 通过奇异值分解求解一个Ax = 0得到
 	Matrix4d design_matrix = Matrix4d::Zero();
-	design_matrix.row(0) = point0[0] * Pose0.row(2) - Pose0.row(0);
+	design_matrix.row(0) = point0[0] * Pose0.row(2) - Pose0.row(0);   // 叉乘
 	design_matrix.row(1) = point0[1] * Pose0.row(2) - Pose0.row(1);
 	design_matrix.row(2) = point1[0] * Pose1.row(2) - Pose1.row(0);
 	design_matrix.row(3) = point1[1] * Pose1.row(2) - Pose1.row(1);
@@ -31,7 +31,7 @@ void GlobalSFM::triangulatePoint(Eigen::Matrix<double, 3, 4> &Pose0, Eigen::Matr
 }
 
 /**
- * @brief 根据上一帧的位姿通过pnp求解当前帧的位姿，使用cv库里的函数
+ * @brief 根据上一帧的位姿通过pnp求解当前帧的位姿，使用cv库里的函数，这里的pnp是以上一帧位姿为初始值，迭代得到当前帧位姿
  * 
  * @param[in] R_initial 上一帧的位姿
  * @param[in] P_initial 
@@ -46,16 +46,16 @@ bool GlobalSFM::solveFrameByPnP(Matrix3d &R_initial, Vector3d &P_initial, int i,
 {
 	vector<cv::Point2f> pts_2_vector;
 	vector<cv::Point3f> pts_3_vector;
-	for (int j = 0; j < feature_num; j++)
+	for (int j = 0; j < feature_num; j++)   // ! 只是简单遍历了对应于当前帧相机坐标的所有3d点，并没有说这个2d点肯定是上一帧的三角化得来的
 	{
 		if (sfm_f[j].state != true) // 是false就是没有被三角化，pnp是3d到2d求解，因此需要3d点
 			continue;
 		Vector2d point2d;
 		for (int k = 0; k < (int)sfm_f[j].observation.size(); k++)
 		{
-			if (sfm_f[j].observation[k].first == i)
+			if (sfm_f[j].observation[k].first == i)  // 已经三角化的点被当前帧观测到
 			{
-				Vector2d img_pts = sfm_f[j].observation[k].second;
+				Vector2d img_pts = sfm_f[j].observation[k].second;  // 归一化坐标
 				cv::Point2f pts_2(img_pts(0), img_pts(1));
 				pts_2_vector.push_back(pts_2);
 				cv::Point3f pts_3(sfm_f[j].position[0], sfm_f[j].position[1], sfm_f[j].position[2]);
@@ -76,7 +76,7 @@ bool GlobalSFM::solveFrameByPnP(Matrix3d &R_initial, Vector3d &P_initial, int i,
 	cv::eigen2cv(P_initial, t);
 	cv::Mat K = (cv::Mat_<double>(3, 3) << 1, 0, 0, 0, 1, 0, 0, 0, 1);
 	bool pnp_succ;
-	pnp_succ = cv::solvePnP(pts_3_vector, pts_2_vector, K, D, rvec, t, 1);  // 
+	pnp_succ = cv::solvePnP(pts_3_vector, pts_2_vector, K, D, rvec, t, 1);  // ! 不是十四讲里的两者之间pnp，这里是个以上一帧位姿为初始值而不断迭代的过程
 	if(!pnp_succ)
 	{
 		return false;
@@ -229,7 +229,7 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 		}
 
 		// triangulate point based on the solve pnp result
-		// 当前帧和最后一帧进行三角化处理
+		// 当前帧和最后一帧进行三角化处理，已知位姿
 		triangulateTwoFrames(i, Pose[i], frame_num - 1, Pose[frame_num - 1], sfm_f);
 	}
 	// Step 2 考虑有些特征点不能被最后一帧看到，因此，fix枢纽帧，遍历枢纽帧到最后一帧进行特征点三角化
@@ -294,6 +294,7 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 */
 
 	//full BA
+	// Step 0~4 是把一个滑窗内的所有kf的位姿和特征点三角化出来，但是这都是线性求解可能会不准，所以需要进行非线性BA
 	// Step 5 求出了所有的位姿和3d点之后，进行一个视觉slam的global BA，gobal BA指的是对滑窗内的所以kf进行BA，非global BA指的是针对相邻两帧
 	// 可能需要介绍一下ceres  http://ceres-solver.org/
 	// 数值求导的速度会快于自动求导，如果说在实时恢复两帧位姿的情况下去BA那么肯定数值求导最好，只不过自己计算出来比较繁琐；但是对于像初始化这种对实时性要求不高的情况，可以选择自动求导
@@ -303,7 +304,7 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 	for (int i = 0; i < frame_num; i++)
 	{
 		//double array for ceres
-		// 这些都是待优化的参数块
+		// ! 这些都是待优化的参数块，因为ceres都是优化数组，所以要进行转换
 		c_translation[i][0] = c_Translation[i].x();
 		c_translation[i][1] = c_Translation[i].y();
 		c_translation[i][2] = c_Translation[i].z();
@@ -320,7 +321,7 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 		// 单目+IMU存在4自由度不可观：Yaw与3平移，pitch与roll因重力而可观，尺度因加速度计而可观
 		// 因此在调试对应slam系统中，如果出现问题，一定要考虑到可观性/能观性问题
 
-		// ! fix设置的世界坐标系第l帧的位姿，同时fix最后一帧的位移用来fix尺度
+		// ! fix设置的第l帧的旋转，同时fixl帧和最后一帧的位移，用来fix尺度，这个尺度只是说防止参数块进行零空间漂移，不是所谓的真实世界中的尺度
 		if (i == l)
 		{
 			problem.SetParameterBlockConstant(c_rotation[i]);
@@ -330,7 +331,8 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 			problem.SetParameterBlockConstant(c_translation[i]);
 		}
 	}
-	// 只有视觉重投影构成约束，因此遍历所有的特征点，构建约束
+
+	// ! 只有视觉重投影构成约束，因此遍历所有的特征点，构建约束
 	for (int i = 0; i < feature_num; i++)
 	{
 		if (sfm_f[i].state != true)	// 必须是三角化之后的
@@ -364,7 +366,8 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 		//cout << "vision only BA not converge " << endl;
 		return false;
 	}
-	// 优化结束，把double数组的值返回成对应类型的值
+
+	// ! 优化结束，把double数组的值返回成对应类型的值
 	// 同时Tcw -> Twc
 	for (int i = 0; i < frame_num; i++)
 	{

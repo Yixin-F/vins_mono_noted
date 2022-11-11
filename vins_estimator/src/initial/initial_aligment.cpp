@@ -29,16 +29,16 @@ void solveGyroscopeBias(map<double, ImageFrame> &all_image_frame, Vector3d* Bgs)
         b += tmp_A.transpose() * tmp_b;
 
     }
-    delta_bg = A.ldlt().solve(b);
+    delta_bg = A.ldlt().solve(b);   // delta_bg是个补偿
     ROS_WARN_STREAM("gyroscope bias initial calibration " << delta_bg.transpose());
     // 滑窗中的零偏设置为求解出来的零偏
     for (int i = 0; i <= WINDOW_SIZE; i++)
-        Bgs[i] += delta_bg;
+        Bgs[i] += delta_bg;  // ! 累加
     // 对all_image_frame中预积分量根据当前零偏重新积分
     for (frame_i = all_image_frame.begin(); next(frame_i) != all_image_frame.end( ); frame_i++)
     {
         frame_j = next(frame_i);
-        frame_j->second.pre_integration->repropagate(Vector3d::Zero(), Bgs[0]);
+        frame_j->second.pre_integration->repropagate(Vector3d::Zero(), Bgs[0]);   // ? 一直Bgs[0]？不应该Bgs[i]？感觉这个量没用到
     }
 }
 

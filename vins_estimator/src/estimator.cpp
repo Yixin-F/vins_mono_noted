@@ -448,7 +448,7 @@ bool Estimator::visualInitialAlign()
         return false;
     }
 
-    // change state
+    // ! change state，调整初始化位姿，注册在枢纽帧坐标系
     // 首先把对齐后KF的位姿附给滑窗中的值，Rwi twc
     for (int i = 0; i <= frame_count; i++)
     {
@@ -474,7 +474,7 @@ bool Estimator::visualInitialAlign()
     f_manager.triangulate(Ps, &(TIC_TMP[0]), &(RIC[0]));
 
     double s = (x.tail<1>())(0);
-    // 将滑窗中的预积分重新计算
+    // ? 将滑窗中的预积分重新计算
     for (int i = 0; i <= WINDOW_SIZE; i++)
     {
         pre_integrations[i]->repropagate(Vector3d::Zero(), Bgs[i]);
@@ -524,7 +524,7 @@ bool Estimator::visualInitialAlign()
 
 /**
  * @brief 寻找滑窗内一个帧作为枢纽帧，要求和最后一帧既有足够的共视也要有足够的视差
- *        这样其他帧都对齐到这个枢纽帧上
+ *        // ! 这样其他帧都对齐到这个枢纽帧上，枢纽帧定义为世界坐标系
  *        得到T_l_last
  * @param[in] relative_R 
  * @param[in] relative_T 

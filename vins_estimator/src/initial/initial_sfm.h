@@ -21,7 +21,7 @@ struct SFMFeature
     double depth;
 };
 
-// ceres 的重投影误差
+// 定义ceres 的重投影误差
 struct ReprojectionError3D
 {
 	ReprojectionError3D(double observed_u, double observed_v)
@@ -30,7 +30,7 @@ struct ReprojectionError3D
 
 	template <typename T>
 	bool operator()(const T* const camera_R, const T* const camera_T, const T* point, T* residuals) const
-	{
+	{   // 重载
 		T p[3];
 		ceres::QuaternionRotatePoint(camera_R, point, p);	// 旋转这个点
 		p[0] += camera_T[0]; p[1] += camera_T[1]; p[2] += camera_T[2];	// 这其实就是Rcw * pw + tcw
@@ -43,12 +43,13 @@ struct ReprojectionError3D
     	return true;
 	}
 
+	// 返回ceres基类指针
 	static ceres::CostFunction* Create(const double observed_x,
 	                                   const double observed_y) 
 	{
 	  return (new ceres::AutoDiffCostFunction<
 	          ReprojectionError3D, 2, 4, 3, 3>(
-	          	new ReprojectionError3D(observed_x,observed_y)));
+	          	new ReprojectionError3D(observed_x,observed_y)));   // ceres::AutoDiffCostFunction<ReprojectionError3D, 2, 4, 3, 3>()中2是残差维度即视差，4是优化相机四元数，3是优化相机平移，3是优化地图点
 	}
 
 	double observed_u;
@@ -72,5 +73,5 @@ private:
 							  int frame1, Eigen::Matrix<double, 3, 4> &Pose1,
 							  vector<SFMFeature> &sfm_f);
 
-	int feature_num;
+	int feature_num;  // 可进行sfm的特征点个数(仅kf)
 };
