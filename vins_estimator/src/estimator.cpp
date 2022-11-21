@@ -963,6 +963,7 @@ void Estimator::optimization()
     ROS_DEBUG("solver costs: %f", t_solver.toc());
     // 把优化后double -> eigen
     double2vector();
+
     // Step 4 边缘化
     // 科普一下舒尔补
     TicToc t_whole_marginalization;
@@ -999,6 +1000,7 @@ void Estimator::optimization()
             marginalization_info->addResidualBlockInfo(residual_block_info);
         }
         // 只有第1个预积分和待边缘化参数块相连
+        // ! imu约束，第0帧和第1帧之间
         {
             if (pre_integrations[1]->sum_dt < 10.0)  // 超过10置信度比较低
             {
@@ -1011,6 +1013,7 @@ void Estimator::optimization()
             }
         }
         // 遍历视觉重投影的约束
+        // ! 重投影约束，第0帧看到的所有重投影
         {
             int feature_index = -1;
             for (auto &it_per_id : f_manager.feature)
@@ -1181,7 +1184,7 @@ void Estimator::slideWindow()
         // 必须是填满了滑窗才可以
         if (frame_count == WINDOW_SIZE)
         {
-            // 一帧一帧交换过去
+            // ! 一帧一帧交换过去，把第0帧放到了最后
             for (int i = 0; i < WINDOW_SIZE; i++)
             {
                 Rs[i].swap(Rs[i + 1]);
@@ -1206,7 +1209,7 @@ void Estimator::slideWindow()
             Bas[WINDOW_SIZE] = Bas[WINDOW_SIZE - 1];
             Bgs[WINDOW_SIZE] = Bgs[WINDOW_SIZE - 1];
             // 预积分量就得置零
-            delete pre_integrations[WINDOW_SIZE];
+            delete pre_integrations[WINDOW_SIZE];  // ! delete，否则内存溢出
             pre_integrations[WINDOW_SIZE] = new IntegrationBase{acc_0, gyr_0, Bas[WINDOW_SIZE], Bgs[WINDOW_SIZE]};
             // buffer清空，等待新的数据来填
             dt_buf[WINDOW_SIZE].clear();
@@ -1219,7 +1222,7 @@ void Estimator::slideWindow()
                 map<double, ImageFrame>::iterator it_0;
                 it_0 = all_image_frame.find(t_0);
                 delete it_0->second.pre_integration;
-                it_0->second.pre_integration = nullptr;
+                it_0->second.pre_integration = nullptr;  //! 防止野指针，建议使用智能指针
  
                 for (map<double, ImageFrame>::iterator it = all_image_frame.begin(); it != it_0; ++it)
                 {

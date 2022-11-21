@@ -103,7 +103,9 @@
             "random": "cpp",
             "set": "cpp",
             "string": "cpp",
-            "string_view": "cpp"
+            "string_view": "cpp",
+            "bitset": "cpp",
+            "cwctype": "cpp"
         },
         "todo-tree.tree.scanMode": "workspace"
 }

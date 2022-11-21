@@ -9,7 +9,7 @@ void ResidualBlockInfo::Evaluate()
     residuals.resize(cost_function->num_residuals());   // 确定残差的维数
 
     std::vector<int> block_sizes = cost_function->parameter_block_sizes();  // 确定相关的参数块数目
-    raw_jacobians = new double *[block_sizes.size()];   // ceres接口都是double数组，因此这里给雅克比准备数组
+    raw_jacobians = new double *[block_sizes.size()];   // ceres接口都是double数组，因此这里给雅克比准备数组，这里相当于new了一个二维数组
     jacobians.resize(block_sizes.size());
     // 这里就是把jacobians每个matrix地址赋给raw_jacobians，然后把raw_jacobians传递给ceres的接口，这样计算结果直接放进了这个matrix
     for (int i = 0; i < static_cast<int>(block_sizes.size()); i++)
@@ -39,7 +39,7 @@ void ResidualBlockInfo::Evaluate()
     //std::cout << saes.eigenvalues() << std::endl;
     //ROS_ASSERT(saes.eigenvalues().minCoeff() >= -1e-6);
     // 如果有核函数，那么就对残差进行相关调整
-    if (loss_function)
+    if (loss_function)   // 柯西
     {
         double residual_scaling_, alpha_sq_norm_;
 
@@ -268,7 +268,7 @@ void MarginalizationInfo::marginalize()
     */
     //multi thread
 
-    // 往A矩阵和b矩阵中填东西，利用多线程加速
+    //  ! 往A矩阵和b矩阵中填东西，利用多线程加速
     TicToc t_thread_summing;
     pthread_t tids[NUM_THREADS];
     ThreadsStruct threadsstruct[NUM_THREADS];
@@ -309,7 +309,7 @@ void MarginalizationInfo::marginalize()
     //ROS_INFO("A diff %f , b diff %f ", (A - tmp_A).sum(), (b - tmp_b).sum());
 
 
-    //TODO
+    // ! 进行舒尔补
     // Amm矩阵的构建是为了保证其正定性
     Eigen::MatrixXd Amm = 0.5 * (A.block(0, 0, m, m) + A.block(0, 0, m, m).transpose());
     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> saes(Amm);   // 特征值分解
@@ -325,7 +325,7 @@ void MarginalizationInfo::marginalize()
     Eigen::MatrixXd Arm = A.block(m, 0, n, m);
     Eigen::MatrixXd Arr = A.block(m, m, n, n);
     Eigen::VectorXd brr = b.segment(m, n); // 剩下的参数
-    A = Arr - Arm * Amm_inv * Amr;
+    A = Arr - Arm * Amm_inv * Amr;    // ! 得到新的H * deltax = g
     b = brr - Arm * Amm_inv * bmm;
 
     // 这个地方根据Ax = b => JT*J = - JT * e
@@ -433,7 +433,8 @@ bool MarginalizationFactor::Evaluate(double const *const *parameters, double *re
         }
     }
     // 更新残差　边缘化后的先验误差 e = e0 + J * dx
-    // 个人理解：根据FEJ．雅克比保持不变，但是残差随着优化会变化，因此下面不更新雅克比　只更新残差
+    // ! 个人理解：根据FEJ．雅克比保持不变，但是残差随着优化会变化，因此下面不更新雅克比　只更新残差
+    // 关于FEJ：https://www.zhihu.com/question/52869487
     // 可以参考　https://blog.csdn.net/weixin_41394379/article/details/89975386
     Eigen::Map<Eigen::VectorXd>(residuals, n) = marginalization_info->linearized_residuals + marginalization_info->linearized_jacobians * dx;
     if (jacobians)
