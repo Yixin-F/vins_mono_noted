@@ -837,7 +837,7 @@ void Estimator::optimization()
         problem.AddResidualBlock(marginalization_factor, NULL,
                                  last_marginalization_parameter_blocks);
     }
-    // imu预积分的约束
+    //!  imu预积分的约束
     for (int i = 0; i < WINDOW_SIZE; i++)
     {
         int j = i + 1;
@@ -849,7 +849,7 @@ void Estimator::optimization()
     }
     int f_m_cnt = 0;
     int feature_index = -1;
-    // 视觉重投影的约束
+    // ! 视觉重投影的约束
     // 遍历每一个特征点
     for (auto &it_per_id : f_manager.feature)
     {
@@ -902,7 +902,7 @@ void Estimator::optimization()
 
     ROS_DEBUG("visual measurement count: %d", f_m_cnt);
     ROS_DEBUG("prepare for ceres: %f", t_prepare.toc());
-    // 回环检测相关的约束
+    // ! 回环检测相关的约束
     if(relocalization_info)
     {
         //printf("set relocalization factor! \n");

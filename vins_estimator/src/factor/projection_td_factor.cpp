@@ -71,7 +71,7 @@ bool ProjectionTdFactor::Evaluate(double const *const *parameters, double *resid
         Eigen::Matrix3d Ri = Qi.toRotationMatrix();
         Eigen::Matrix3d Rj = Qj.toRotationMatrix();
         Eigen::Matrix3d ric = qic.toRotationMatrix();
-        Eigen::Matrix<double, 2, 3> reduce(2, 3);
+        Eigen::Matrix<double, 2, 3> reduce(2, 3);    // ! 链式法则求导
 #ifdef UNIT_SPHERE_ERROR
         double norm = pts_camera_j.norm();
         Eigen::Matrix3d norm_jaco;

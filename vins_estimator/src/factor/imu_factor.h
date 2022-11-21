@@ -9,7 +9,7 @@
 
 #include <ceres/ceres.h>
 
-class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
+class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>    // imu预积分残差15维，7是位姿自由度，速度和零偏共9自由度(两帧)
 {
   public:
     IMUFactor() = delete;
@@ -28,11 +28,12 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
     virtual bool Evaluate(double const *const *parameters, double *residuals, double **jacobians) const
     {
         // 便于后续计算，把参数块都转换成eigen
-        // imu预积分的约束的参数是相邻两帧的位姿 速度和零偏
-        Eigen::Vector3d Pi(parameters[0][0], parameters[0][1], parameters[0][2]);
+        // imu预积分的约束的参数是相邻两帧的位姿 速度和零偏 
+        // ! PVQ、bias，这样看残差应该是16维，是因为此时的位姿用的是四元数，但是在预积分里用的是旋转向量，所以变成了15维
+        Eigen::Vector3d Pi(parameters[0][0], parameters[0][1], parameters[0][2]);    // 位姿7自由度
         Eigen::Quaterniond Qi(parameters[0][6], parameters[0][3], parameters[0][4], parameters[0][5]);
 
-        Eigen::Vector3d Vi(parameters[1][0], parameters[1][1], parameters[1][2]);
+        Eigen::Vector3d Vi(parameters[1][0], parameters[1][1], parameters[1][2]);  // 速度和零偏共9自由度
         Eigen::Vector3d Bai(parameters[1][3], parameters[1][4], parameters[1][5]);
         Eigen::Vector3d Bgi(parameters[1][6], parameters[1][7], parameters[1][8]);
 
@@ -71,11 +72,11 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
         // 得到残差
         residual = pre_integration->evaluate(Pi, Qi, Vi, Bai, Bgi,
                                             Pj, Qj, Vj, Baj, Bgj);
-        // 因为ceres没有g2o设置信息矩阵的接口，因此置信度直接乘在残差上，这里通过LLT分解，相当于将信息矩阵开根号
+        // ! 因为ceres没有g2o设置信息矩阵的接口，因此置信度直接乘在残差上，这里通过LLT分解，相当于将信息矩阵开根号
         Eigen::Matrix<double, 15, 15> sqrt_info = Eigen::LLT<Eigen::Matrix<double, 15, 15>>(pre_integration->covariance.inverse()).matrixL().transpose();
         //sqrt_info.setIdentity();
         // 这就是带有信息矩阵的残差
-        residual = sqrt_info * residual;
+        residual = sqrt_info * residual;   // 应为eT * P * e，先将P进行LLT分解得，eT * L * LT * e，则新的残差为LT * e
         // 关于雅克比的计算手动推导一下
         if (jacobians)
         {
@@ -95,13 +96,17 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
 ///                ROS_BREAK();
             }
 
+            //!  jacobian:
+            //  |                 15x7                                15x9                                      15x7                                             15x9                         |
+            //  | |   偏e / 偏[Pk, Qk]   | |   偏e / 偏[Vk, biask]   | |    偏e / 偏[Pk+1, Qk+1]   | |   偏e / 偏[Vk+1, biask+1]   | |
+
             // ! 把雅克比分块
             if (jacobians[0])
             {
-                Eigen::Map<Eigen::Matrix<double, 15, 7, Eigen::RowMajor>> jacobian_pose_i(jacobians[0]);
+                Eigen::Map<Eigen::Matrix<double, 15, 7, Eigen::RowMajor>> jacobian_pose_i(jacobians[0]);   // eigen map 映射
                 jacobian_pose_i.setZero();
 
-                jacobian_pose_i.block<3, 3>(O_P, O_P) = -Qi.inverse().toRotationMatrix();
+                jacobian_pose_i.block<3, 3>(O_P, O_P) = -Qi.inverse().toRotationMatrix();  // 这里存在取逆，是因为Q维护的是Imu相对于世界，而公式里对于P的误差里，前面乘了一个世界相对于imu的变换
                 jacobian_pose_i.block<3, 3>(O_P, O_R) = Utility::skewSymmetric(Qi.inverse() * (0.5 * G * sum_dt * sum_dt + Pj - Pi - Vi * sum_dt));
 
 #if 0
@@ -170,7 +175,7 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
                 //ROS_ASSERT(fabs(jacobian_pose_j.maxCoeff()) < 1e8);
                 //ROS_ASSERT(fabs(jacobian_pose_j.minCoeff()) < 1e8);
             }
-            if (jacobians[3])
+            if (jacobians[3])   // 零偏与k+1时刻无关
             {
                 Eigen::Map<Eigen::Matrix<double, 15, 9, Eigen::RowMajor>> jacobian_speedbias_j(jacobians[3]);
                 jacobian_speedbias_j.setZero();
