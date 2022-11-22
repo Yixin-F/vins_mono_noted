@@ -794,21 +794,21 @@ void Estimator::optimization()
     ceres::Problem problem;
     ceres::LossFunction *loss_function;
     //loss_function = new ceres::HuberLoss(1.0);
-    loss_function = new ceres::CauchyLoss(1.0);
-    // Step 1 定义待优化的参数块，类似g2o的顶点
-    // 参数块 1： 滑窗中位姿包括位置和姿态，共11帧
+    loss_function = new ceres::CauchyLoss(1.0);   // 柯西核
+    // Step 1 仅仅定义待优化的参数块，类似g2o的顶点
+    // > 参数块 1： 滑窗中位姿包括位置和姿态，共11帧
     for (int i = 0; i < WINDOW_SIZE + 1; i++)
     {
         // 由于姿态不满足正常的加法，也就是李群上没有加法，因此需要自己定义他的加法
-        ceres::LocalParameterization *local_parameterization = new PoseLocalParameterization();
-        problem.AddParameterBlock(para_Pose[i], SIZE_POSE, local_parameterization);
-        problem.AddParameterBlock(para_SpeedBias[i], SIZE_SPEEDBIAS);
+        ceres::LocalParameterization *local_parameterization = new PoseLocalParameterization();   // virtual虚函数重载
+        problem.AddParameterBlock(para_Pose[i], SIZE_POSE, local_parameterization);   // ! P、Q  11x7的Values，一个滑窗内有10帧，现在优化的是11帧；para_Pose是double是数组，那么para_Pose[i]是指针
+        problem.AddParameterBlock(para_SpeedBias[i], SIZE_SPEEDBIAS);  // ! V、Bias  11x9的Values
     }
-    // 参数块 2： 相机imu间的外参
+    // > 参数块 2： 相机imu间的外参
     for (int i = 0; i < NUM_OF_CAM; i++)
     {
         ceres::LocalParameterization *local_parameterization = new PoseLocalParameterization();
-        problem.AddParameterBlock(para_Ex_Pose[i], SIZE_POSE, local_parameterization);
+        problem.AddParameterBlock(para_Ex_Pose[i], SIZE_POSE, local_parameterization);   // ! P、Q  1x7
         if (!ESTIMATE_EXTRINSIC)
         {
             ROS_DEBUG("fix extinsic param");
@@ -818,18 +818,19 @@ void Estimator::optimization()
         else
             ROS_DEBUG("estimate extinsic param");
     }
-    // 传感器的时间同步
+    // >参数块3：传感器延时Td
     if (ESTIMATE_TD)
     {
-        problem.AddParameterBlock(para_Td[0], 1);
+        problem.AddParameterBlock(para_Td[0], 1);  // ! Td  1x1
         //problem.SetParameterBlockConstant(para_Td[0]);
     }
     // 实际上还有地图点，其实平凡的参数块不需要调用AddParameterBlock，增加残差块接口时会自动绑定
     TicToc t_whole, t_prepare;
     // ! eigen -> double，参数块都是Eigen格式的，但是在优化过程中使用的是double类型的数组
-    vector2double();
+    vector2double();  // ! 这里直接将顶点Values直接赋值了，因为AddParameterBlock是指针传递
+
     // Step 2 通过残差约束来添加残差块，类似g2o的边
-    // 上一次的边缘化结果作为这一次的先验
+    // > 约束1：上一次的边缘化结果作为这一次的先验
     if (last_marginalization_info)
     {
         // construct new marginlization_factor
@@ -837,33 +838,35 @@ void Estimator::optimization()
         problem.AddResidualBlock(marginalization_factor, NULL,
                                  last_marginalization_parameter_blocks);
     }
-    //!  imu预积分的约束
+
+    //  > 约束2：imu预积分的约束相邻两帧的PVQ和Bias
     for (int i = 0; i < WINDOW_SIZE; i++)
     {
         int j = i + 1;
-        // 时间过长这个约束就不可信了
+        // 时间过长这个约束就不可信了，就不添加此次约束
         if (pre_integrations[j]->sum_dt > 10.0)
             continue;
         IMUFactor* imu_factor = new IMUFactor(pre_integrations[j]);
-        problem.AddResidualBlock(imu_factor, NULL, para_Pose[i], para_SpeedBias[i], para_Pose[j], para_SpeedBias[j]);
+        problem.AddResidualBlock(imu_factor, NULL, para_Pose[i], para_SpeedBias[i], para_Pose[j], para_SpeedBias[j]);  // ceres::CostFunction的重载是解析求导的关键
     }
+
+    //  > 约束3：视觉重投影的约束两个共视帧的PQ、外参和逆深度
     int f_m_cnt = 0;
-    int feature_index = -1;
-    // ! 视觉重投影的约束
+    int feature_index = -1;  // 自设feature索引
     // 遍历每一个特征点
     for (auto &it_per_id : f_manager.feature)
     {
         it_per_id.used_num = it_per_id.feature_per_frame.size();
-        // 进行特征点有效性的检查
+        // 进行特征点有效性的检查，主要检查至少被滑窗内的两帧看到
         if (!(it_per_id.used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2))
             continue;
  
         ++feature_index;
-        // 第一个观测到这个特征点的帧idx
+        // 第一个观测到这个特征点的帧idx，imu_i 没有任何关于imu的含义只是索引而已 
         int imu_i = it_per_id.start_frame, imu_j = imu_i - 1;
         // 特征点在第一个帧下的归一化相机系坐标
         Vector3d pts_i = it_per_id.feature_per_frame[0].point;
-        // 遍历看到这个特征点的所有KF
+        // ! 遍历看到这个特征点的所有KF
         for (auto &it_per_frame : it_per_id.feature_per_frame)
         {
             imu_j++;
@@ -893,7 +896,7 @@ void Estimator::optimization()
             else
             {
                 ProjectionFactor *f = new ProjectionFactor(pts_i, pts_j);   // 构造函数就是同一个特征点在不同帧的观测
-                // 约束的变量是该特征点的第一个观测帧以及其他一个观测帧，加上外参和特征点逆深度
+                // 约束的变量是该特征点的第一个观测帧以及其他一个观测帧的位姿，加上外参和特征点逆深度
                 problem.AddResidualBlock(f, loss_function, para_Pose[imu_i], para_Pose[imu_j], para_Ex_Pose[0], para_Feature[feature_index]);
             }
             f_m_cnt++;
@@ -902,7 +905,8 @@ void Estimator::optimization()
 
     ROS_DEBUG("visual measurement count: %d", f_m_cnt);
     ROS_DEBUG("prepare for ceres: %f", t_prepare.toc());
-    // ! 回环检测相关的约束
+
+    //  > 约束4：回环检测相关的约束
     if(relocalization_info)
     {
         //printf("set relocalization factor! \n");

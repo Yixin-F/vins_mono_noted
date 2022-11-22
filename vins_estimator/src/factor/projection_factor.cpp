@@ -30,9 +30,11 @@ bool ProjectionFactor::Evaluate(double const *const *parameters, double *residua
     Eigen::Vector3d tic(parameters[2][0], parameters[2][1], parameters[2][2]);
     Eigen::Quaterniond qic(parameters[2][6], parameters[2][3], parameters[2][4], parameters[2][5]);
 
-    double inv_dep_i = parameters[3][0];
+    double inv_dep_i = parameters[3][0];   // 逆深度
+
+    // > 在这个坐标系转换过程中，涉及到PQ、相机与imu之间的外参和逆深度，所以优化这三类言之有礼
     // 地图点在i帧相机坐标系下坐标
-    Eigen::Vector3d pts_camera_i = pts_i / inv_dep_i;
+    Eigen::Vector3d pts_camera_i = pts_i / inv_dep_i;   // 归一化复原
     // 转成第i帧imu坐标系
     Eigen::Vector3d pts_imu_i = qic * pts_camera_i + tic;
     // 转成世界坐标系
@@ -47,7 +49,7 @@ bool ProjectionFactor::Evaluate(double const *const *parameters, double *residua
     residual =  tangent_base * (pts_camera_j.normalized() - pts_j.normalized());
 #else
     double dep_j = pts_camera_j.z();    // 第j帧相机系下深度
-    residual = (pts_camera_j / dep_j).head<2>() - pts_j.head<2>();  // 重投影误差
+    residual = (pts_camera_j / dep_j).head<2>() - pts_j.head<2>();  // 重投影误差xy
 #endif
 
     residual = sqrt_info * residual;    // 误差乘上信息矩阵
@@ -57,7 +59,7 @@ bool ProjectionFactor::Evaluate(double const *const *parameters, double *residua
         Eigen::Matrix3d Ri = Qi.toRotationMatrix();
         Eigen::Matrix3d Rj = Qj.toRotationMatrix();
         Eigen::Matrix3d ric = qic.toRotationMatrix();
-        Eigen::Matrix<double, 2, 3> reduce(2, 3);
+        Eigen::Matrix<double, 2, 3> reduce(2, 3);  // ! 重投影误差在第j中对xyz进行求导是一个2x3的，这里涉及一个链式求导
 #ifdef UNIT_SPHERE_ERROR
         double norm = pts_camera_j.norm();
         Eigen::Matrix3d norm_jaco;
@@ -80,11 +82,11 @@ bool ProjectionFactor::Evaluate(double const *const *parameters, double *residua
             Eigen::Map<Eigen::Matrix<double, 2, 7, Eigen::RowMajor>> jacobian_pose_i(jacobians[0]);
 
             Eigen::Matrix<double, 3, 6> jaco_i;
-            jaco_i.leftCols<3>() = ric.transpose() * Rj.transpose();
-            jaco_i.rightCols<3>() = ric.transpose() * Rj.transpose() * Ri * -Utility::skewSymmetric(pts_imu_i);
+            jaco_i.leftCols<3>() = ric.transpose() * Rj.transpose();   // ok
+            jaco_i.rightCols<3>() = ric.transpose() * Rj.transpose() * Ri * -Utility::skewSymmetric(pts_imu_i);  // ok
 
-            jacobian_pose_i.leftCols<6>() = reduce * jaco_i;
-            jacobian_pose_i.rightCols<1>().setZero();
+            jacobian_pose_i.leftCols<6>() = reduce * jaco_i;  // ok，链式求导
+            jacobian_pose_i.rightCols<1>().setZero();  // ok  
         }
 
         if (jacobians[1])
@@ -92,34 +94,34 @@ bool ProjectionFactor::Evaluate(double const *const *parameters, double *residua
             Eigen::Map<Eigen::Matrix<double, 2, 7, Eigen::RowMajor>> jacobian_pose_j(jacobians[1]);
 
             Eigen::Matrix<double, 3, 6> jaco_j;
-            jaco_j.leftCols<3>() = ric.transpose() * -Rj.transpose();
-            jaco_j.rightCols<3>() = ric.transpose() * Utility::skewSymmetric(pts_imu_j);
+            jaco_j.leftCols<3>() = ric.transpose() * -Rj.transpose();  // ok
+            jaco_j.rightCols<3>() = ric.transpose() * Utility::skewSymmetric(pts_imu_j);  // ok
 
-            jacobian_pose_j.leftCols<6>() = reduce * jaco_j;
+            jacobian_pose_j.leftCols<6>() = reduce * jaco_j;  // ok
             jacobian_pose_j.rightCols<1>().setZero();
         }
         if (jacobians[2])
         {
             Eigen::Map<Eigen::Matrix<double, 2, 7, Eigen::RowMajor>> jacobian_ex_pose(jacobians[2]);
             Eigen::Matrix<double, 3, 6> jaco_ex;
-            jaco_ex.leftCols<3>() = ric.transpose() * (Rj.transpose() * Ri - Eigen::Matrix3d::Identity());
-            Eigen::Matrix3d tmp_r = ric.transpose() * Rj.transpose() * Ri * ric;
+            jaco_ex.leftCols<3>() = ric.transpose() * (Rj.transpose() * Ri - Eigen::Matrix3d::Identity());  // ok
+            Eigen::Matrix3d tmp_r = ric.transpose() * Rj.transpose() * Ri * ric;  // ok
             jaco_ex.rightCols<3>() = -tmp_r * Utility::skewSymmetric(pts_camera_i) + Utility::skewSymmetric(tmp_r * pts_camera_i) +
-                                     Utility::skewSymmetric(ric.transpose() * (Rj.transpose() * (Ri * tic + Pi - Pj) - tic));
-            jacobian_ex_pose.leftCols<6>() = reduce * jaco_ex;
-            jacobian_ex_pose.rightCols<1>().setZero();
+                                     Utility::skewSymmetric(ric.transpose() * (Rj.transpose() * (Ri * tic + Pi - Pj) - tic));  // ok
+            jacobian_ex_pose.leftCols<6>() = reduce * jaco_ex;  // ok
+            jacobian_ex_pose.rightCols<1>().setZero();  // ok
         }
         if (jacobians[3])
         {
             Eigen::Map<Eigen::Vector2d> jacobian_feature(jacobians[3]);
 #if 1
-            jacobian_feature = reduce * ric.transpose() * Rj.transpose() * Ri * ric * pts_i * -1.0 / (inv_dep_i * inv_dep_i);
+            jacobian_feature = reduce * ric.transpose() * Rj.transpose() * Ri * ric * pts_i * -1.0 / (inv_dep_i * inv_dep_i);  // ok
 #else
             jacobian_feature = reduce * ric.transpose() * Rj.transpose() * Ri * ric * pts_i;
 #endif
         }
     }
-    sum_t += tic_toc.toc();
+    sum_t += tic_toc.toc();  // the whole time
 
     return true;
 }

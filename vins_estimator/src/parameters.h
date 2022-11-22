@@ -43,8 +43,8 @@ void readParameters(ros::NodeHandle &n);
 
 enum SIZE_PARAMETERIZATION
 {
-    SIZE_POSE = 7,
-    SIZE_SPEEDBIAS = 9,
+    SIZE_POSE = 7,     // ! P是3维，Q是4维
+    SIZE_SPEEDBIAS = 9,  // ! V是3维，两个Bias是6维
     SIZE_FEATURE = 1
 };
 

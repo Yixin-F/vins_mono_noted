@@ -9,15 +9,15 @@
 
 #include <ceres/ceres.h>
 
-class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>    // imu预积分残差15维，7是位姿自由度，速度和零偏共9自由度(两帧)
+class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>    // imu预积分残差15维(PVQB -> 5x3=15)；7是位姿自由度，速度和零偏共9自由度(两帧)
 {
   public:
-    IMUFactor() = delete;
+    IMUFactor() = delete;   // ! 删除默认构造函数，说明有成员变量不可默认初始化
     IMUFactor(IntegrationBase* _pre_integration):pre_integration(_pre_integration)
     {
     }
     /**
-     * @brief  使用ceres解析求导，必须重载这个函数
+     * @brief  // ! 使用ceres解析求导，必须重载这个函数，而真正的求jacobian的evaluate()函数在IntegrationBase中
      * 
      * @param[in] parameters 这是一个二维数组，每个参数块都是一个double数组，而一个观测会对多个参数块形成约束
      * @param[in] residuals 残差的计算结果，是一个一维数组，残差就是该观测量和约束的状态量通过某种关系形成残差
@@ -68,7 +68,7 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>    // imu预�
         }
 #endif
 
-        Eigen::Map<Eigen::Matrix<double, 15, 1>> residual(residuals);
+        Eigen::Map<Eigen::Matrix<double, 15, 1>> residual(residuals);   // ! eigen映射相当于引用
         // 得到残差
         residual = pre_integration->evaluate(Pi, Qi, Vi, Bai, Bgi,
                                             Pj, Qj, Vj, Baj, Bgj);
@@ -76,7 +76,7 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>    // imu预�
         Eigen::Matrix<double, 15, 15> sqrt_info = Eigen::LLT<Eigen::Matrix<double, 15, 15>>(pre_integration->covariance.inverse()).matrixL().transpose();
         //sqrt_info.setIdentity();
         // 这就是带有信息矩阵的残差
-        residual = sqrt_info * residual;   // 应为eT * P * e，先将P进行LLT分解得，eT * L * LT * e，则新的残差为LT * e
+        residual = sqrt_info * residual;   // 应为eT * P * e，如果没有P则证明完全置信，先将P进行LLT分解得，eT * L * LT * e，则新的残差为LT * e
         // 关于雅克比的计算手动推导一下
         if (jacobians)
         {
@@ -103,20 +103,22 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>    // imu预�
             // ! 把雅克比分块
             if (jacobians[0])
             {
-                Eigen::Map<Eigen::Matrix<double, 15, 7, Eigen::RowMajor>> jacobian_pose_i(jacobians[0]);   // eigen map 映射
+                Eigen::Map<Eigen::Matrix<double, 15, 7, Eigen::RowMajor>> jacobian_pose_i(jacobians[0]);   // eigen map 映射，默认列优先，但是行优先更快
                 jacobian_pose_i.setZero();
 
-                jacobian_pose_i.block<3, 3>(O_P, O_P) = -Qi.inverse().toRotationMatrix();  // 这里存在取逆，是因为Q维护的是Imu相对于世界，而公式里对于P的误差里，前面乘了一个世界相对于imu的变换
-                jacobian_pose_i.block<3, 3>(O_P, O_R) = Utility::skewSymmetric(Qi.inverse() * (0.5 * G * sum_dt * sum_dt + Pj - Pi - Vi * sum_dt));
+                // 这里存在Q取逆，是因为Q维护的是Imu相对于世界，而公式里对于P的误差里，前面乘了一个世界相对于imu的变换
+                // block<3, 3>(O_P, O_P)  代表残差P对Pk求导，维数是3x3
+                jacobian_pose_i.block<3, 3>(O_P, O_P) = -Qi.inverse().toRotationMatrix();    // ok
+                jacobian_pose_i.block<3, 3>(O_P, O_R) = Utility::skewSymmetric(Qi.inverse() * (0.5 * G * sum_dt * sum_dt + Pj - Pi - Vi * sum_dt));  // ok
 
 #if 0
             jacobian_pose_i.block<3, 3>(O_R, O_R) = -(Qj.inverse() * Qi).toRotationMatrix();
 #else
                 Eigen::Quaterniond corrected_delta_q = pre_integration->delta_q * Utility::deltaQ(dq_dbg * (Bgi - pre_integration->linearized_bg));
-                jacobian_pose_i.block<3, 3>(O_R, O_R) = -(Utility::Qleft(Qj.inverse() * Qi) * Utility::Qright(corrected_delta_q)).bottomRightCorner<3, 3>();
+                jacobian_pose_i.block<3, 3>(O_R, O_R) = -(Utility::Qleft(Qj.inverse() * Qi) * Utility::Qright(corrected_delta_q)).bottomRightCorner<3, 3>();  // 按照论文公式 ok
 #endif
 
-                jacobian_pose_i.block<3, 3>(O_V, O_R) = Utility::skewSymmetric(Qi.inverse() * (G * sum_dt + Vj - Vi));
+                jacobian_pose_i.block<3, 3>(O_V, O_R) = Utility::skewSymmetric(Qi.inverse() * (G * sum_dt + Vj - Vi));  // ok
 
                 jacobian_pose_i = sqrt_info * jacobian_pose_i;
 
@@ -131,27 +133,27 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>    // imu预�
             {
                 Eigen::Map<Eigen::Matrix<double, 15, 9, Eigen::RowMajor>> jacobian_speedbias_i(jacobians[1]);
                 jacobian_speedbias_i.setZero();
-                jacobian_speedbias_i.block<3, 3>(O_P, O_V - O_V) = -Qi.inverse().toRotationMatrix() * sum_dt;
-                jacobian_speedbias_i.block<3, 3>(O_P, O_BA - O_V) = -dp_dba;
-                jacobian_speedbias_i.block<3, 3>(O_P, O_BG - O_V) = -dp_dbg;
+                jacobian_speedbias_i.block<3, 3>(O_P, O_V - O_V) = -Qi.inverse().toRotationMatrix() * sum_dt;  // ok
+                jacobian_speedbias_i.block<3, 3>(O_P, O_BA - O_V) = -dp_dba;  // ok 
+                jacobian_speedbias_i.block<3, 3>(O_P, O_BG - O_V) = -dp_dbg;  // ok
 
 #if 0
             jacobian_speedbias_i.block<3, 3>(O_R, O_BG - O_V) = -dq_dbg;
 #else
                 //Eigen::Quaterniond corrected_delta_q = pre_integration->delta_q * Utility::deltaQ(dq_dbg * (Bgi - pre_integration->linearized_bg));
                 //jacobian_speedbias_i.block<3, 3>(O_R, O_BG - O_V) = -Utility::Qleft(Qj.inverse() * Qi * corrected_delta_q).bottomRightCorner<3, 3>() * dq_dbg;
-                jacobian_speedbias_i.block<3, 3>(O_R, O_BG - O_V) = -Utility::Qleft(Qj.inverse() * Qi * pre_integration->delta_q).bottomRightCorner<3, 3>() * dq_dbg;
+                jacobian_speedbias_i.block<3, 3>(O_R, O_BG - O_V) = -Utility::Qleft(Qj.inverse() * Qi * pre_integration->delta_q).bottomRightCorner<3, 3>() * dq_dbg;  // ok
 #endif
 
-                jacobian_speedbias_i.block<3, 3>(O_V, O_V - O_V) = -Qi.inverse().toRotationMatrix();
-                jacobian_speedbias_i.block<3, 3>(O_V, O_BA - O_V) = -dv_dba;
-                jacobian_speedbias_i.block<3, 3>(O_V, O_BG - O_V) = -dv_dbg;
+                jacobian_speedbias_i.block<3, 3>(O_V, O_V - O_V) = -Qi.inverse().toRotationMatrix();  // ok
+                jacobian_speedbias_i.block<3, 3>(O_V, O_BA - O_V) = -dv_dba;  // ok 
+                jacobian_speedbias_i.block<3, 3>(O_V, O_BG - O_V) = -dv_dbg;  // ok
 
-                jacobian_speedbias_i.block<3, 3>(O_BA, O_BA - O_V) = -Eigen::Matrix3d::Identity();
+                jacobian_speedbias_i.block<3, 3>(O_BA, O_BA - O_V) = -Eigen::Matrix3d::Identity();  // ok
 
-                jacobian_speedbias_i.block<3, 3>(O_BG, O_BG - O_V) = -Eigen::Matrix3d::Identity();
+                jacobian_speedbias_i.block<3, 3>(O_BG, O_BG - O_V) = -Eigen::Matrix3d::Identity();  // ok
 
-                jacobian_speedbias_i = sqrt_info * jacobian_speedbias_i;
+                jacobian_speedbias_i = sqrt_info * jacobian_speedbias_i;  // ok
 
                 //ROS_ASSERT(fabs(jacobian_speedbias_i.maxCoeff()) < 1e8);
                 //ROS_ASSERT(fabs(jacobian_speedbias_i.minCoeff()) < 1e8);
@@ -161,13 +163,13 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>    // imu预�
                 Eigen::Map<Eigen::Matrix<double, 15, 7, Eigen::RowMajor>> jacobian_pose_j(jacobians[2]);
                 jacobian_pose_j.setZero();
 
-                jacobian_pose_j.block<3, 3>(O_P, O_P) = Qi.inverse().toRotationMatrix();
+                jacobian_pose_j.block<3, 3>(O_P, O_P) = Qi.inverse().toRotationMatrix();  // ok
 
 #if 0
             jacobian_pose_j.block<3, 3>(O_R, O_R) = Eigen::Matrix3d::Identity();
 #else
-                Eigen::Quaterniond corrected_delta_q = pre_integration->delta_q * Utility::deltaQ(dq_dbg * (Bgi - pre_integration->linearized_bg));
-                jacobian_pose_j.block<3, 3>(O_R, O_R) = Utility::Qleft(corrected_delta_q.inverse() * Qi.inverse() * Qj).bottomRightCorner<3, 3>();
+                Eigen::Quaterniond corrected_delta_q = pre_integration->delta_q * Utility::deltaQ(dq_dbg * (Bgi - pre_integration->linearized_bg));  // ok
+                jacobian_pose_j.block<3, 3>(O_R, O_R) = Utility::Qleft(corrected_delta_q.inverse() * Qi.inverse() * Qj).bottomRightCorner<3, 3>();  // ok
 #endif
 
                 jacobian_pose_j = sqrt_info * jacobian_pose_j;
@@ -180,11 +182,11 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>    // imu预�
                 Eigen::Map<Eigen::Matrix<double, 15, 9, Eigen::RowMajor>> jacobian_speedbias_j(jacobians[3]);
                 jacobian_speedbias_j.setZero();
 
-                jacobian_speedbias_j.block<3, 3>(O_V, O_V - O_V) = Qi.inverse().toRotationMatrix();
+                jacobian_speedbias_j.block<3, 3>(O_V, O_V - O_V) = Qi.inverse().toRotationMatrix();  // ok
 
-                jacobian_speedbias_j.block<3, 3>(O_BA, O_BA - O_V) = Eigen::Matrix3d::Identity();
+                jacobian_speedbias_j.block<3, 3>(O_BA, O_BA - O_V) = Eigen::Matrix3d::Identity();  // ok
 
-                jacobian_speedbias_j.block<3, 3>(O_BG, O_BG - O_V) = Eigen::Matrix3d::Identity();
+                jacobian_speedbias_j.block<3, 3>(O_BG, O_BG - O_V) = Eigen::Matrix3d::Identity();  // ok
 
                 jacobian_speedbias_j = sqrt_info * jacobian_speedbias_j;
 

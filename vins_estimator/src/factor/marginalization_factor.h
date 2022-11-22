@@ -29,7 +29,7 @@ struct ResidualBlockInfo
     std::vector<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> jacobians;
     Eigen::VectorXd residuals;
 
-    int localSize(int size)
+    int localSize(int size)   // 保证是6维
     {
         return size == 7 ? 6 : size;
     }

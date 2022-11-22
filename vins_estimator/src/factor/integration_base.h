@@ -191,7 +191,8 @@ class IntegrationBase
      
     }
 
-    // imu计算和给定相邻帧状态量的残差，作为帧间约束
+    // ! imu计算和给定相邻帧状态量的残差，作为帧间约束；这里将残差和ESKF联系起来了？
+    // ! 这里所有的入参是imu和视觉重投影的整体优化值，如果系统最优应该是与单纯的imu预积分值接近，即前后两者残差为0
     Eigen::Matrix<double, 15, 1> evaluate(const Eigen::Vector3d &Pi, const Eigen::Quaterniond &Qi, const Eigen::Vector3d &Vi, const Eigen::Vector3d &Bai, const Eigen::Vector3d &Bgi,
                                           const Eigen::Vector3d &Pj, const Eigen::Quaterniond &Qj, const Eigen::Vector3d &Vj, const Eigen::Vector3d &Baj, const Eigen::Vector3d &Bgj)
     {
@@ -208,7 +209,7 @@ class IntegrationBase
         Eigen::Vector3d dba = Bai - linearized_ba;
         Eigen::Vector3d dbg = Bgi - linearized_bg;
 
-        Eigen::Quaterniond corrected_delta_q = delta_q * Utility::deltaQ(dq_dbg * dbg);
+        Eigen::Quaterniond corrected_delta_q = delta_q * Utility::deltaQ(dq_dbg * dbg);    // 这边是 new = old + jaco * delta，仅考虑了bias对imu的影响
         Eigen::Vector3d corrected_delta_v = delta_v + dv_dba * dba + dv_dbg * dbg;
         Eigen::Vector3d corrected_delta_p = delta_p + dp_dba * dba + dp_dbg * dbg;
 
