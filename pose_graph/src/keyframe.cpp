@@ -118,7 +118,7 @@ void KeyFrame::computeWindowBRIEFPoint()
 	extractor(image, window_keypoints, window_brief_descriptors);	// 计算VIO节点提取的特征点的描述子
 }
 
-// 额外提取fast特征点并计算描述子
+// ! 额外提取fast特征点并计算描述子，担心前端光流追踪的fast角点太少
 void KeyFrame::computeBRIEFPoint()
 {
 	BriefExtractor extractor(BRIEF_PATTERN_FILE.c_str());
@@ -277,7 +277,7 @@ void KeyFrame::PnPRANSAC(const vector<cv::Point2f> &matched_2d_old_norm,
     cv::Mat K = (cv::Mat_<double>(3, 3) << 1.0, 0, 0, 0, 1.0, 0, 0, 0, 1.0);	// 设置单位阵
     Matrix3d R_inital;
     Vector3d P_inital;
-    Matrix3d R_w_c = origin_vio_R * qic;	// 转成相机坐标系
+    Matrix3d R_w_c = origin_vio_R * qic;	// ! 转成相机坐标系，使用的仍是vio发布的kf位姿，没有加入回环的shift，因为入参地图点没有根据回环修正
     Vector3d T_w_c = origin_vio_T + origin_vio_R * tic;
 
 		// Twc -> Tcw
@@ -299,13 +299,13 @@ void KeyFrame::PnPRANSAC(const vector<cv::Point2f> &matched_2d_old_norm,
             solvePnPRansac(matched_3d, matched_2d_old_norm, K, D, rvec, t, true, 100, sqrt(10.0 / 460.0), 0.99, inliers);
         else
             // 使用当前帧位姿作为起始位姿，考虑到回环帧距离起始帧并不远
-						solvePnPRansac(matched_3d, matched_2d_old_norm, K, D, rvec, t, true, 100, 10.0 / 460.0, 0.99, inliers);
+			solvePnPRansac(matched_3d, matched_2d_old_norm, K, D, rvec, t, true, 100, 10.0 / 460.0, 0.99, inliers);
 
     }
-		// 初始化状态位全是0
+	// 初始化状态位全是0
     for (int i = 0; i < (int)matched_2d_old_norm.size(); i++)
         status.push_back(0);
-		// inlier部分置1
+	// inlier部分置1
     for( int i = 0; i < inliers.rows; i++)
     {
         int n = inliers.at<int>(i);

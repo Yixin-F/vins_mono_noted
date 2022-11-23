@@ -598,8 +598,8 @@ void PoseGraph::optimize4DoF()
 
             Vector3d cur_t, vio_t;
             Matrix3d cur_r, vio_r;
-            cur_kf->getPose(cur_t, cur_r);  // 最新优化后的位姿
-            cur_kf->getVioPose(vio_t, vio_r);   // VIO的位姿
+            cur_kf->getPose(cur_t, cur_r);  // ! 最新优化后的位姿
+            cur_kf->getVioPose(vio_t, vio_r);   // ! VIO的位姿
             m_drift.lock();
             // 计算当前帧的VIO位姿和优化后位姿差
             yaw_drift = Utility::R2ypr(cur_r).x() - Utility::R2ypr(vio_r).x();

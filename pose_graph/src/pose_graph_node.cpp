@@ -251,7 +251,8 @@ void vio_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
     {
         odometry_buf.pop();
     }
-
+    
+    // ! marker
     visualization_msgs::Marker key_odometrys;
     key_odometrys.header = pose_msg->header;
     key_odometrys.header.frame_id = "world";
@@ -329,7 +330,7 @@ void process()
 
         // find out the messages with same time stamp
         m_buf.lock();
-        // 做一个时间戳对齐，涉及到原图，KF位姿以及KF对应地图点
+        // 做一个时间戳对齐，涉及到原图，KF位姿以及KF对应地图点，来自estimator
         if(!image_buf.empty() && !point_buf.empty() && !pose_buf.empty())
         {
             // 原图时间戳比另外两个晚，只能扔掉早于第一个原图的消息
@@ -350,7 +351,7 @@ void process()
             {
                 pose_msg = pose_buf.front();    // 取出来pose
                 pose_buf.pop();
-                while (!pose_buf.empty())   // 清空所有的pose，回环的帧率慢一些没关系
+                while (!pose_buf.empty())   // ! 清空所有的pose，回环的帧率慢一些没关系，尽量让最新帧即时参与回环，防止"回环处理速率太慢，导致buf里的kf太老了"
                     pose_buf.pop();
                 // 找到对应pose的原图
                 while (image_buf.front()->header.stamp.toSec() < pose_msg->header.stamp.toSec())
@@ -378,7 +379,7 @@ void process()
                 continue;
             }
 
-            if (skip_cnt < SKIP_CNT)    // 降频，每隔SKIP_CNT帧处理一次
+            if (skip_cnt < SKIP_CNT)    // ! 降频，每隔SKIP_CNT帧处理一次，非共视帧
             {
                 skip_cnt++;
                 continue;
@@ -414,7 +415,7 @@ void process()
                                      pose_msg->pose.pose.orientation.x,
                                      pose_msg->pose.pose.orientation.y,
                                      pose_msg->pose.pose.orientation.z).toRotationMatrix();
-            if((T - last_t).norm() > SKIP_DIS)  // 要求KF相隔必要的平移距离
+            if((T - last_t).norm() > SKIP_DIS)  // ! 要求KF相隔必要的平移距离
             {
                 vector<cv::Point3f> point_3d;   // VIO世界坐标系下的地图点坐标
                 vector<cv::Point2f> point_2d_uv;   // 归一化相机坐标系的坐标
@@ -442,7 +443,7 @@ void process()
 
                     //printf("u %f, v %f \n", p_2d_uv.x, p_2d_uv.y);
                 }
-                // 创建回环检测节点的KF
+                // ! 创建可以参与回环检测节点的KF，满足非共视要求
                 KeyFrame* keyframe = new KeyFrame(pose_msg->header.stamp.toSec(), frame_index, T, R, image,
                                    point_3d, point_2d_uv, point_2d_normal, point_id, sequence);   
                 m_process.lock();
@@ -494,7 +495,7 @@ int main(int argc, char **argv)
     n.getParam("visualization_shift_x", VISUALIZATION_SHIFT_X); // 这两个shift基本都是0
     n.getParam("visualization_shift_y", VISUALIZATION_SHIFT_Y);
     n.getParam("skip_cnt", SKIP_CNT);   // 跳过前SKIP_CNT帧
-    n.getParam("skip_dis", SKIP_DIS);   // 两帧距离门限
+    n.getParam("skip_dis", SKIP_DIS);   // ! 两帧距离门限，这边orb2直接引入"共视帧"概念
     std::string config_file;
     n.getParam("config_file", config_file);
     cv::FileStorage fsSettings(config_file, cv::FileStorage::READ);
@@ -516,7 +517,7 @@ int main(int argc, char **argv)
         ROW = fsSettings["image_height"];   // 图片分辨率
         COL = fsSettings["image_width"];
         std::string pkg_path = ros::package::getPath("pose_graph");
-        string vocabulary_file = pkg_path + "/../support_files/brief_k10L6.bin";    // 训练好的二进制词袋的路径
+        string vocabulary_file = pkg_path + "/../support_files/brief_k10L6.bin";    // ! 训练好的二进制词袋的路径，orb2里面是txt文件，vins是bin文件，压缩了很多模型导入很快(尤其针对手机端)
         cout << "vocabulary_file" << vocabulary_file << endl;
         posegraph.loadVocabulary(vocabulary_file);  // 加载二进制词袋
 
